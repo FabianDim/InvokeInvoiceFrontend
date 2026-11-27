@@ -39,7 +39,9 @@ use `x64-static-release`, then run:
 
 The executable and settings retain the `InvokeInvoiceSystem` product name.
 The default API is `https://invoice-backend-app-69d26786220b.herokuapp.com`.
-For a separately running local backend set
+When launching the frontend with VS Code's CMake Tools debugger in the combined
+workspace, it uses `http://127.0.0.1:1234` instead. Start the local backend first;
+it listens on that address by default. For other launch methods, set
 `$env:INVOICE_API_URL = 'http://127.0.0.1:1234'` before launching the app.
 Other URLs must use HTTPS. The frontend never starts an embedded server and needs
 no MongoDB credentials. Account requests and demo exports use the same service URL.
