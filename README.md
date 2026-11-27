@@ -69,8 +69,18 @@ defines hosted demo export. Clients send `X-Invoice-API-Version: 1`. API compati
 is independent of frontend/backend release numbers. The backend vendors a pinned
 contract copy, so both repositories build independently.
 
-CI tests pushes and pull requests. A `vMAJOR.MINOR.PATCH` tag builds, tests and publishes
-a signed Windows EXE. `INVOICE_UPDATE_SIGNING_KEY` is a private repository secret;
+Work goes through a feature PR into `Development`, then a `Development` PR into
+`main`. The main ruleset requires **All available tests** and **Development PR
+required**, with no bypass, force pushes or branch deletion. Development PRs run
+every registered frontend CTest suite and signing tests. Main promotions reuse
+successful Development PR test evidence only for the exact same Git tree; changed
+files or expired evidence require a new tested Development PR.
+
+Every push to `main` automatically builds, tests and publishes a signed Windows EXE.
+The version is the manifest version plus the release workflow run number in the
+patch component; reruns keep their version and never overwrite a published release.
+An explicit `vMAJOR.MINOR.PATCH` tag also supports a manually selected version.
+`INVOICE_UPDATE_SIGNING_KEY` is a private repository secret;
 only the public trust key is committed. Deploy additive API changes before releasing
 the frontend that needs them.
 

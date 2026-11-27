@@ -1,0 +1,27 @@
+name: Main branch policy
+
+# Run trusted base-branch YAML only. Never check out or execute PR contents here:
+# otherwise a PR could modify its own source-branch validation to pass.
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  development-pr:
+    name: Development PR required
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check source branch and repository
+        env:
+          HEAD_BRANCH: ${{ github.head_ref }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          if [[ "$HEAD_BRANCH" != "Development" || "$HEAD_REPOSITORY" != "$REPOSITORY" ]]; then
+            echo '::error::main only accepts pull requests from Development in this repository.'
+            exit 1
+          fi
