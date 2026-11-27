@@ -1,0 +1,12 @@
+{
+  "name": "invoke-invoice-frontend",
+  "version-string": "0.2.0",
+  "dependencies": [
+    "fmt",
+    "openssl",
+    "qtkeychain-qt6",
+    "qtbase",
+    "qttools",
+    "qthttpserver"
+  ]
+}

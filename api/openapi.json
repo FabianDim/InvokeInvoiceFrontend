@@ -1,0 +1,349 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Invoke Invoice hosted demo PDF",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://invoice-backend-app-69d26786220b.herokuapp.com"
+    }
+  ],
+  "paths": {
+    "/demo/invoices/pdf": {
+      "post": {
+        "operationId": "renderDemoInvoice",
+        "security": [],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Invoice-API-Version",
+            "required": true,
+            "schema": {
+              "const": "1"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Maximum 8 MiB JSON.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "Version",
+                  "InvoiceNumber",
+                  "DateCreated",
+                  "DateDue",
+                  "Paid",
+                  "Business",
+                  "Client",
+                  "Items"
+                ],
+                "properties": {
+                  "Version": {
+                    "const": 2
+                  },
+                  "InvoiceNumber": {
+                    "type": "string",
+                    "maxLength": 120,
+                    "minLength": 1
+                  },
+                  "DateCreated": {
+                    "type": "string",
+                    "format": "date",
+                    "maxLength": 10
+                  },
+                  "DateDue": {
+                    "type": "string",
+                    "format": "date",
+                    "maxLength": 10
+                  },
+                  "Paid": {
+                    "type": "boolean"
+                  },
+                  "Business": {
+                    "type": "object",
+                    "required": [
+                      "BusinessName",
+                      "GSTRegistered",
+                      "PaymentTerms"
+                    ],
+                    "properties": {
+                      "BusinessName": {
+                        "type": "string",
+                        "maxLength": 200,
+                        "minLength": 1
+                      },
+                      "Address": {
+                        "type": "string",
+                        "maxLength": 1000
+                      },
+                      "GSTRegistered": {
+                        "type": "boolean"
+                      },
+                      "PaymentTerms": {
+                        "enum": [
+                          "COD",
+                          "14",
+                          "30"
+                        ]
+                      },
+                      "InvoiceTerms": {
+                        "type": "string",
+                        "maxLength": 4000
+                      },
+                      "LogoData": {
+                        "type": "string",
+                        "maxLength": 7340032,
+                        "description": "Base64 PNG/JPEG; at most 2048 pixels per side."
+                      },
+                      "ABN": {
+                        "type": "string",
+                        "maxLength": 120
+                      },
+                      "ACN": {
+                        "type": "string",
+                        "maxLength": 120
+                      },
+                      "Phone": {
+                        "type": "string",
+                        "maxLength": 120
+                      },
+                      "Website": {
+                        "type": "string",
+                        "maxLength": 120
+                      },
+                      "BankName": {
+                        "type": "string",
+                        "maxLength": 120
+                      },
+                      "BankAccountName": {
+                        "type": "string",
+                        "maxLength": 120
+                      },
+                      "BankBSB": {
+                        "type": "string",
+                        "maxLength": 120
+                      },
+                      "BankAccountNumber": {
+                        "type": "string",
+                        "maxLength": 120
+                      }
+                    }
+                  },
+                  "Client": {
+                    "type": "object",
+                    "required": [
+                      "Name"
+                    ],
+                    "properties": {
+                      "Name": {
+                        "type": "string",
+                        "maxLength": 200,
+                        "minLength": 1
+                      },
+                      "Address": {
+                        "type": "string",
+                        "maxLength": 1000
+                      },
+                      "ContactName": {
+                        "type": "string",
+                        "maxLength": 200
+                      },
+                      "Email": {
+                        "type": "string",
+                        "maxLength": 200
+                      },
+                      "Phone": {
+                        "type": "string",
+                        "maxLength": 200
+                      }
+                    }
+                  },
+                  "Items": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "Name",
+                        "Quantity",
+                        "Price"
+                      ],
+                      "properties": {
+                        "Name": {
+                          "type": "string",
+                          "maxLength": 500,
+                          "minLength": 1
+                        },
+                        "Quantity": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 1000000
+                        },
+                        "Price": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1000000000
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "example": {
+                "Version": 2,
+                "InvoiceNumber": "DEMO-001",
+                "DateCreated": "2026-11-27",
+                "DateDue": "2026-12-11",
+                "Paid": false,
+                "Business": {
+                  "BusinessName": "Example Business",
+                  "Address": "1 Example Street",
+                  "GSTRegistered": false,
+                  "PaymentTerms": "14",
+                  "LogoData": ""
+                },
+                "Client": {
+                  "Name": "Example Customer",
+                  "Address": "2 Example Street"
+                },
+                "Items": [
+                  {
+                    "Name": "Service",
+                    "Quantity": 2,
+                    "Price": 15.5
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "PDF, at most 16 MiB. Cache-Control: no-store.",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid snapshot/API version",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit; Retry-After contains seconds",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Render failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service busy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

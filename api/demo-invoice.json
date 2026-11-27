@@ -1,0 +1,25 @@
+{
+  "Version": 2,
+  "InvoiceNumber": "DEMO-001",
+  "DateCreated": "2026-11-27",
+  "DateDue": "2026-12-11",
+  "Paid": false,
+  "Business": {
+    "BusinessName": "Example Business",
+    "Address": "1 Example Street",
+    "GSTRegistered": false,
+    "PaymentTerms": "14",
+    "LogoData": ""
+  },
+  "Client": {
+    "Name": "Example Customer",
+    "Address": "2 Example Street"
+  },
+  "Items": [
+    {
+      "Name": "Service",
+      "Quantity": 2,
+      "Price": 15.5
+    }
+  ]
+}

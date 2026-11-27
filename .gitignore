@@ -1,0 +1,127 @@
+# CMake build directories
+__pycache__/
+build/
+out/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+install_manifest.txt
+
+# Visual Studio build
+*.sln
+*.vcxproj*
+*.user
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.VC.opendb
+ipch/
+.vs/
+*.dbmdl
+
+# Qt generated files
+*.moc
+*.rcc
+*.qmlc
+*.jsc
+*.qrc.depends
+*.autosave
+*.pro.user*
+*.pro.user
+*.pro.user.*
+
+# Qt Creator
+*.pro.user*
+*.qbs.user*
+*.creator.user*
+*.creator*
+*.autosave
+
+# vcpkg cache/build directories (but **not** vcpkg.json or installed ports)
+/vcpkg/
+/vcpkg_installed/
+/vcpkg_buildtrees/
+/vcpkg_downloads/
+/vcpkg_out/
+/vcpkg/**
+/vcpkg_installed/**
+# Do NOT ignore vcpkg.json or vcpkg-configuration.json
+!vcpkg.json
+!vcpkg-configuration.json
+
+# --- vcpkg: keep source/config, ignore generated artifacts ---
+/vcpkg/buildtrees/
+/vcpkg/packages/
+/vcpkg/downloads/
+/vcpkg/installed/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs and temp
+*.log
+*.tmp
+*.bak
+*.swp
+
+# User/project local config
+*.local
+*.cache
+*.plist
+
+# Test outputs
+Testing/
+test_output/
+
+# Ignore generated docs (optional, uncomment if using Doxygen)
+# docs/
+
+# Ignore binaries and libs
+*.exe
+*.dll
+*.lib
+*.so
+*.a
+*.app
+*.dylib
+*.obj
+*.o
+*.pch
+
+# Ignore generated PDF/HTML (optional)
+*.pdf
+*.html
+
+
+# --- vcpkg: keep source/config, ignore generated artifacts ---
+vcpkg/buildtrees/
+vcpkg/packages/
+vcpkg/downloads/
+vcpkg/installed/
+
+# Optional: if you use classic manifests/binaries outside vcpkg/
+*.obj
+*.o
+*.pdb
+*.ilk
+*.idb
+*.exe
+*.dll
+*.lib
+*.exp
+
+#Documents
+SECURITY_REVIEW.md
+*.pdf
+# Update signing private keys must never be committed.
+*signing-key*.pem
+*.private.pem
+
+.env
+.env.*
+__pycache__/
+
+/.ci-vcpkg/
+/.ci-vcpkg-cache/
