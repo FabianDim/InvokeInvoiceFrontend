@@ -180,7 +180,7 @@ class BusinessSessionTests : public QObject {
         QCOMPARE(data.value("StockPrices").toObject().value(stock).toDouble(), 9.25);
         form.save_failed("Retry");
         form.populate_client_stock(business_items(business));
-        auto* current_price = qobject_cast<QLineEdit*>(form.findChild<QTableWidget*>("client_stock_prices")->cellWidget(0, 2));
+        auto* current_price = form.findChild<QTableWidget*>("client_stock_prices")->cellWidget(0, 2)->findChild<QLineEdit*>();
         QCOMPARE(current_price->text(), "9.25");
         form.findChild<QPushButton*>("login_button_")->click();
         QVERIFY(terms->currentData().toString().isEmpty());

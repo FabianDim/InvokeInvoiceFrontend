@@ -183,17 +183,17 @@ ManagementForm::ManagementForm(const QString& title,
 
     UiStyle::form(form_layout_);
     auto* buttons = new UiStyle::ActionRow(content);
-    auto* save = new QPushButton(editing_ ? "Save changes" : "Save", this);
+    auto* save = new QPushButton(editing_ ? "Save changes" : resource_ == "client" ? "Save client" : "Save", this);
     auto* back = new QPushButton(editing_ ? "Cancel" : "Back", this);
     save->setObjectName(editing_ ? resource_ + "_edit_save" : "register_button_");
     back->setObjectName(editing_ ? resource_ + "_edit_cancel" : "login_button_");
     UiStyle::button(save, "primary");
     UiStyle::button(back);
     buttons->addWidget(back, 1);
-    buttons->addWidget(save, 1);
+    if (resource_ != "client") buttons->addWidget(save, 1);
     if (resource_ != "account" && !editing_) {
         const auto noun = resource_ == "stock" ? "stock item" : resource_;
-        auto* another = new QPushButton("Save and add new " + noun, this);
+        auto* another = new QPushButton(resource_ == "client" ? "Save and add another" : "Save and add new " + noun, this);
         another->setObjectName("save_add_new");
         UiStyle::button(another);
         buttons->addWidget(another, 1);
@@ -201,6 +201,10 @@ ManagementForm::ManagementForm(const QString& title,
             add_another_ = true;
             submit_form();
         });
+    }
+    if (resource_ == "client") {
+        buttons->addWidget(save, 1);
+        layout->addSpacing(8);
     }
     layout->addWidget(buttons);
 

@@ -69,6 +69,14 @@ QTabBar::tab { background: #eceee6; color: #647469; padding: 12px 20px; border-b
 QTabBar::tab:selected { background: #fffefa; color: #20362e; border-bottom-color: #76934e; }
 QTabBar::tab:hover { background: #e6efda; }
 QTableWidget { background: #fffefa; alternate-background-color: #f2f5ec; gridline-color: #e4e8dc; selection-background-color: #e2edcf; selection-color: #20362e; border: none; }
+QLabel[role="sectionTitle"] { color: #20362e; font-size: 18px; font-weight: 600; }
+QLabel[role="pricingBadge"] { color: #5d7053; background: #edf2e6; border-radius: 5px; padding: 5px 8px; font-size: 10px; font-weight: 600; }
+QTableWidget#client_stock_prices { border: 1px solid #dedfd4; border-radius: 8px; alternate-background-color: #f7f8f2; }
+QTableWidget#client_stock_prices::item { padding: 0 14px; border-bottom: 1px solid #e8ebdf; }
+QTableWidget#client_stock_prices QHeaderView::section { background: #eef2e7; padding: 10px 14px; font-size: 12px; }
+QWidget#client_stock_price_cell { background: transparent; }
+QLineEdit#client_stock_price { min-height: 24px; max-height: 24px; padding: 6px 10px; background: #fffefa; }
+QLineEdit#client_stock_price:focus { background: #ffffff; border: 2px solid #64834c; padding: 5px 9px; }
 QHeaderView::section { background: #eaf0e2; color: #46594e; padding: 10px; border: none; border-bottom: 1px solid #d0dbc5; font-weight: 600; }
 QScrollArea { border: none; background: transparent; }
 QScrollBar:vertical { background: #eef0e7; width: 10px; margin: 0; }
