@@ -110,8 +110,6 @@ qt_import_plugins(InvokeInvoiceSystem INCLUDE Qt6::QJpegPlugin)
 if(WIN32)
     string(REPLACE "." "," INVOICE_FILE_VERSION_COMMAS "${INVOICE_APP_VERSION},0")
     configure_file(InvokeInvoiceSystem.rc.in InvokeInvoiceSystem.rc @ONLY)
-    set_source_files_properties("${CMAKE_CURRENT_BINARY_DIR}/InvokeInvoiceSystem.rc" PROPERTIES
-        OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/forms/resources/icons/invoice_icon.ico")
     target_sources(InvokeInvoiceSystem PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/InvokeInvoiceSystem.rc")
     qt_import_plugins(InvokeInvoiceSystem INCLUDE Qt6::QWindowsIntegrationPlugin)
 endif()
