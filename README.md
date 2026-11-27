@@ -73,12 +73,12 @@ contract copy, so both repositories build independently.
 
 Work goes through a feature PR into `Development`, then a `Development` PR into
 `main`. The main ruleset requires **All available tests** and **Development PR
-required**, with no bypass, force pushes or branch deletion. Development PRs run
-every registered frontend CTest suite and signing tests. Main promotions reuse
-successful Development PR test evidence only for the exact same Git tree; changed
-files or expired evidence require a new tested Development PR.
+required**, with no bypass, force pushes or branch deletion. Every push to
+`Development` runs the frontend CTest suites and signing tests. Main promotions
+wait for successful test evidence from the exact Development commit and merge
+tree; changed files or expired evidence require a new successful Development run.
 
-Every push to `main` automatically builds, tests and publishes a signed Windows EXE.
+Every push to `main` automatically builds and publishes a signed Windows EXE.
 The version is the manifest version plus the release workflow run number in the
 patch component; reruns keep their version and never overwrite a published release.
 An explicit `vMAJOR.MINOR.PATCH` tag also supports a manually selected version.
