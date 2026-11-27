@@ -1,10 +1,10 @@
 name: Frontend CI
 on:
   pull_request:
-    branches: [main, Development]
+    branches: [main]
     types: [opened, synchronize, reopened, edited, ready_for_review]
   push:
-    branches: [main, Development]
+    branches: [Development]
 permissions:
   contents: read
 concurrency:
@@ -29,6 +29,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Check promotion validation
+        if: github.event_name == 'push' && github.ref == 'refs/heads/Development'
         run: python -m unittest discover -s tests -p test_promotion_validation.py -v
       - name: Reuse verified Development tests
         if: github.event_name == 'pull_request' && github.base_ref == 'main'
@@ -36,20 +37,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python .github/scripts/promotion-validation.py verify
       - uses: ilammy/msvc-dev-cmd@v1
-        if: github.base_ref != 'main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/Development'
         with:
           arch: x64
       - uses: actions/cache@v4
-        if: github.base_ref != 'main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/Development'
         with:
           path: ${{ github.workspace }}/.ci-vcpkg-cache
           key: frontend-windows-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
           restore-keys: frontend-windows-
       - shell: pwsh
-        if: github.base_ref != 'main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/Development'
         run: ./.github/scripts/setup-vcpkg.ps1
       - shell: pwsh
-        if: github.base_ref != 'main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/Development'
         run: |
           New-Item -ItemType Directory -Force test-results | Out-Null
           cmake --preset x64-release
@@ -61,10 +62,10 @@ jobs:
           python -m unittest discover -s tests -p test_update_signing_keys.py -v
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Record the tested source tree
-        if: github.event_name == 'pull_request' && github.base_ref == 'Development'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/Development'
         run: python .github/scripts/promotion-validation.py record
       - name: Save test results
-        if: always() && github.base_ref != 'main'
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/Development'
         uses: actions/upload-artifact@v6
         with:
           name: test-results
