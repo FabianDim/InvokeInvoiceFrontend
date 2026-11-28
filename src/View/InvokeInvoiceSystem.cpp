@@ -5,6 +5,8 @@
 #include <QCommandLineParser>
 #include <qfile.h>
 #include <QIcon>
+#include <QStatusBar>
+#include <QLabel>
 #include "Application/Accounts/FrontendAccountSession.h"
 #include "Application/Controllers/AppController.h"
 #include "Infrastructure/Http/ApiClient.h"
@@ -30,6 +32,7 @@ int main(int argc, char* argv[]) {
     waitOption.setFlags(QCommandLineOption::HiddenFromHelp);
     commandLine.addOption(waitOption);
     commandLine.addOption({"no-update-handoff", "Run this executable directly, bypassing the cached update (recovery)."});
+    commandLine.addOption({"development", "Run the local build without cached updates or release update checks."});
     QCommandLineOption selfCheckOption("update-self-check",
         "Report this executable's version and exit; used by the updater's startup check.");
     selfCheckOption.setFlags(QCommandLineOption::HiddenFromHelp);
@@ -42,9 +45,11 @@ int main(int argc, char* argv[]) {
         std::fflush(stdout);
         return EXIT_SUCCESS;
     }
-    if (!commandLine.isSet("no-update-handoff") && Infrastructure::Updates::launch_cached_update()) return EXIT_SUCCESS;
+    const bool development = INVOICE_DEVELOPMENT_BUILD || commandLine.isSet("development");
+    if (!development && !commandLine.isSet("no-update-handoff") && Infrastructure::Updates::launch_cached_update()) return EXIT_SUCCESS;
     Infrastructure::Logging::initialize(true);
-    qCInfo(Infrastructure::Logging::app) << "event=application.starting qt_version=" << qVersion();
+    qCInfo(Infrastructure::Logging::app) << "event=application.starting qt_version=" << qVersion()
+        << "development=" << development << "executable=" << QCoreApplication::applicationFilePath();
     QObject::connect(&app, &QCoreApplication::aboutToQuit, []() {
         qCInfo(Infrastructure::Logging::app) << "event=application.stopping";
     });
@@ -73,8 +78,12 @@ int main(int argc, char* argv[]) {
     App::Views::MainWindow window(accountManager);
     Application::Controllers::AppController controller(&window, accountManager, api);
     window.resize(1080, 860);
+    if (development) {
+        window.setWindowTitle("Invoke Invoice - Development");
+        window.statusBar()->addPermanentWidget(new QLabel("Development build - release updates disabled", &window));
+    }
     window.show();
-    Infrastructure::Updates::UpdateController updates(&window);
+    if (!development) new Infrastructure::Updates::UpdateController(&window);
     qCInfo(Infrastructure::Logging::app) << "event=application.ready mode=" << (localBackend ? "local_backend" : "remote_backend");
     return app.exec();
 }

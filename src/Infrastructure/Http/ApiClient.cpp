@@ -12,6 +12,7 @@
 #include <QFileInfo>
 #include <QRegularExpression>
 #include <QSaveFile>
+#include <QTimer>
 
 using namespace Infrastructure::Http;
 
@@ -72,6 +73,9 @@ QNetworkRequest ApiClient::make_request(const QUrl& url) const {
     request.setRawHeader("X-Request-ID", Infrastructure::Logging::newRequestId());
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     request.setTransferTimeout(30000);
+    // Hosted responses can stall on a reused HTTP/2 connection after a 401.
+    // Use HTTP/1.1 for API traffic; HTTPS certificate verification is unchanged.
+    request.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
     request.setRawHeader("X-Invoice-API-Version", ApiContract::client_version);
     if (!session_token_.isEmpty())
@@ -420,19 +424,59 @@ void Infrastructure::Http::ApiClient::get_business_list() {
     try {
         auto reply = networkManager_->get(request);
         Infrastructure::Logging::traceReply(reply);
+        // Drain chunks as they arrive rather than retaining a large logo-bearing
+        // response inside the network reply until finished().
+        auto data = std::make_shared<QByteArray>();
+        reply->setReadBufferSize(64 * 1024);
+        connect(reply, &QNetworkReply::readyRead, this, [reply, data]() {
+            data->append(reply->readAll());
+        });
+        auto lastReported = std::make_shared<qint64>(-1);
+        connect(reply, &QNetworkReply::downloadProgress, this, [reply, lastReported](qint64 received, qint64 total) {
+            if (*lastReported < 0 || received - *lastReported >= 256 * 1024 || received == total) {
+                Infrastructure::Logging::RequestContext context(reply->request().rawHeader("X-Request-ID"));
+                qCDebug(Infrastructure::Logging::http) << "event=business_list.progress received=" << received << "total=" << total;
+                *lastReported = received;
+            }
+        });
+        // Bound the whole load, including a connection that stops completing
+        // replies without triggering Qt's inactivity timeout.
+        auto* deadline = new QTimer(reply);
+        deadline->setObjectName("business_list_deadline");
+        deadline->setSingleShot(true);
+        connect(deadline, &QTimer::timeout, reply, [reply, data]() {
+            Infrastructure::Logging::RequestContext context(reply->request().rawHeader("X-Request-ID"));
+            qCWarning(Infrastructure::Logging::http) << "event=business_list.deadline received=" << data->size()
+                << "buffered=" << reply->bytesAvailable()
+                << "content_length=" << reply->header(QNetworkRequest::ContentLengthHeader).toLongLong()
+                << "http2=" << reply->attribute(QNetworkRequest::Http2WasUsedAttribute).toBool();
+            reply->setProperty("business_list_timed_out", true);
+            reply->abort();
+        });
+        deadline->start(45000);
         connect(reply, &QNetworkReply::finished, this, [=]() {
+            deadline->stop();
             Infrastructure::Logging::RequestContext context(reply->request().rawHeader("X-Request-ID"));
             if (reply->error() == QNetworkReply::NoError && session == session_generation_) {
-                QByteArray data = reply->readAll();
-                QJsonDocument jsonResponse = QJsonDocument::fromJson(data);
-                emit business_list_received(jsonResponse);
+                data->append(reply->readAll());
+                QJsonParseError error;
+                const auto jsonResponse = QJsonDocument::fromJson(*data, &error);
+                if (reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() != 200 ||
+                    error.error != QJsonParseError::NoError || !jsonResponse.isObject()) {
+                    emit business_list_failed("The server returned an invalid business list. Please retry.");
+                } else {
+                    qCDebug(Infrastructure::Logging::http) << "event=business_list.loaded count=" << jsonResponse.object().size();
+                    emit business_list_received(jsonResponse);
+                }
             } else if (session == session_generation_) {
-                emit business_list_failed(reply->errorString());
+                emit business_list_failed(reply->property("business_list_timed_out").toBool()
+                    ? "The request timed out. Check your connection and retry." : reply->errorString());
             }
             reply->deleteLater(); // Clean up the reply object
         });
     } catch (const std::exception& e) {
         qCWarning(Infrastructure::Logging::http) << "event=business_list.request.exception";
+        emit business_list_failed("Could not request your businesses. Please retry.");
     }
 }
 

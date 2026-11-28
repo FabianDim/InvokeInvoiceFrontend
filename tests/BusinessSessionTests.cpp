@@ -2139,6 +2139,32 @@ class BusinessSessionTests : public QObject {
         QVERIFY(!button(dashboard, "Create new invoice")->isEnabled());
     }
 
+    void dashboard_shows_business_loading_failure_and_retry() {
+        Dashboard dashboard;
+        auto* status = dashboard.findChild<QLabel*>("business_loading_status");
+        auto* retry = dashboard.findChild<QPushButton*>("retry_businesses_button");
+        auto* selector = dashboard.findChild<QComboBox*>("business_selector");
+        QVERIFY(status && retry && selector);
+        QVERIFY(status->isHidden());
+        dashboard.set_loading(true);
+        QVERIFY(!status->isHidden());
+        QCOMPARE(selector->currentText(), QString("Loading businesses..."));
+        dashboard.set_error("Connection timed out");
+        QVERIFY(!status->isHidden());
+        QVERIFY(status->text().contains("Connection timed out"));
+        QVERIFY(!retry->isHidden());
+        QVERIFY(!selector->currentText().contains("Create"));
+        QSignalSpy requested(&dashboard, &Dashboard::retry_businesses);
+        retry->click();
+        QCOMPARE(requested.count(), 1);
+        dashboard.set_loading(true);
+        QVERIFY(retry->isHidden());
+        dashboard.populate_business_list(business_list());
+        QVERIFY(status->isHidden());
+        QVERIFY(retry->isHidden());
+        QVERIFY(selector->isEnabled());
+    }
+
     void controls_have_consistent_roles_and_geometry_data() {
         QTest::addColumn<QSize>("window_size");
         QTest::newRow("standard") << QSize(800, 800);
