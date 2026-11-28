@@ -15,6 +15,7 @@ AppController::AppController(App::Views::MainWindow* main,
     connect(api_, &Infrastructure::Http::ApiClient::business_created, main_->dashboard_page(), &App::Views::Dashboard::select_after_loading);
     connect(api_, &Infrastructure::Http::ApiClient::business_list_loading, this, [this]() { main_->dashboard_page()->set_loading(true); });
     connect(api_, &Infrastructure::Http::ApiClient::business_list_failed, main_->dashboard_page(), &App::Views::Dashboard::set_error);
+    connect(main_->dashboard_page(), &App::Views::Dashboard::retry_businesses, api_, &Infrastructure::Http::ApiClient::get_business_list);
     connect(main_->default_invoice_settings_page(), &App::Views::DefaultInvoiceSettings::save_requested,
             api_, &Infrastructure::Http::ApiClient::save_invoice_settings);
     connect(api_, &Infrastructure::Http::ApiClient::invoice_settings_saved,

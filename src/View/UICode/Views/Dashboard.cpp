@@ -102,7 +102,14 @@ void App::Views::Dashboard::create_page_layout() {
     layout->addWidget(default_invoice_settings_button, 6, 1);
     loading_label_ = UiStyle::label("", content, "status");
     loading_label_->setObjectName("business_loading_status");
+    loading_label_->setWordWrap(true);
     layout->addWidget(loading_label_, 7, 0, 1, 2);
+    retry_businesses_button_ = new QPushButton("Retry loading businesses", content);
+    UiStyle::button(retry_businesses_button_, "secondary", true);
+    retry_businesses_button_->setObjectName("retry_businesses_button");
+    retry_businesses_button_->hide();
+    layout->addWidget(retry_businesses_button_, 8, 0);
+    connect(retry_businesses_button_, &QPushButton::clicked, this, &Dashboard::retry_businesses);
 
     button_group_->addButton(invoice_button);
     button_group_->addButton(client_button);
@@ -198,10 +205,16 @@ void Dashboard::update_business_selection() {
 }
 
 void Dashboard::set_loading(bool loading) {
-    loading_label_->setText(loading ? "Loading businesses..." : "");
+    UiStyle::message(loading_label_, loading ? "Loading businesses..." : "");
+    retry_businesses_button_->hide();
+    if (loading && business_select_->count() == 1)
+        business_select_->setItemText(0, "Loading businesses...");
     business_select_->setEnabled(!loading && business_select_->count() > 1);
 }
 void Dashboard::set_error(const QString& message) {
     set_loading(false);
-    loading_label_->setText("Could not load businesses: " + message);
+    if (business_select_->count() == 1)
+        business_select_->setItemText(0, "Businesses could not be loaded");
+    UiStyle::message(loading_label_, "Could not load businesses: " + message);
+    retry_businesses_button_->show();
 }

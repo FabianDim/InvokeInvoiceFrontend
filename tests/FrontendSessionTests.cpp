@@ -7,6 +7,7 @@
 #include <QFile>
 #include <QTemporaryDir>
 #include <QTcpServer>
+#include <QTimer>
 #include <QtTest>
 
 using Application::Accounts::FrontendAccountSession;
@@ -34,8 +35,21 @@ struct SessionServer {
     std::unique_ptr<QHttpServerResponder> pending_login;
     std::unique_ptr<QHttpServerResponder> pending_logout;
     QStringList requests;
+    QByteArray businesses_body = "{}";
+    QList<QByteArray> business_authorizations;
+    bool hold_businesses = false;
+    std::unique_ptr<QHttpServerResponder> pending_businesses;
 
     bool start() {
+        http.route("/business/list", QHttpServerRequest::Method::Get,
+            [this](const QHttpServerRequest& request, QHttpServerResponder& responder) {
+                requests.append("businesses");
+                business_authorizations.append(request.value("Authorization"));
+                if (hold_businesses)
+                    pending_businesses = std::make_unique<QHttpServerResponder>(std::move(responder));
+                else
+                    responder.write(businesses_body, "application/json");
+            });
         http.route("/demo/invoices/pdf", QHttpServerRequest::Method::Post,
             [this](const QHttpServerRequest& request, QHttpServerResponder& responder) {
                 requests.append("demo-pdf");
@@ -131,6 +145,91 @@ class FrontendSessionTests : public QObject {
     Q_OBJECT
 
   private slots:
+    void large_business_list_loads_after_rejected_login() {
+        SessionServer server;
+        QVERIFY(server.start());
+        server.login_status = StatusCode::Unauthorized;
+        server.login_body = "{\"error\":\"Invalid email or password\"}";
+        FrontendAccountSession account;
+        ApiClient api(server.url(), &account);
+        QSignalSpy login_failed(&api, &ApiClient::login_failed);
+        QSignalSpy logged_in(&api, &ApiClient::login_succeeded);
+        QSignalSpy loaded(&api, &ApiClient::business_list_received);
+        QSignalSpy failed(&api, &ApiClient::business_list_failed);
+        api.do_login("test@example.com", "wrong", false);
+        QTRY_COMPARE(login_failed.count(), 1);
+        server.login_status = StatusCode::Ok;
+        server.login_body = QByteArray{};
+        const QJsonObject business{{"_id", "65d000000000000000000004"},
+            {"BusinessName", "Large logo business"}, {"LogoData", QString(1200000, QLatin1Char('A'))}};
+        const QJsonDocument expected(QJsonObject{{"65d000000000000000004", business}});
+        server.businesses_body = expected.toJson(QJsonDocument::Compact);
+        connect(&api, &ApiClient::login_succeeded, &api, &ApiClient::get_business_list);
+        api.do_login("test@example.com", "Secret1!", false);
+        QTRY_COMPARE(logged_in.count(), 1);
+        QTRY_COMPARE_WITH_TIMEOUT(loaded.count(), 1, 10000);
+        QCOMPARE(qvariant_cast<QJsonDocument>(loaded.first().first()), expected);
+        QCOMPARE(server.business_authorizations, QList<QByteArray>{"Bearer session-2"});
+        QVERIFY(failed.isEmpty());
+    }
+
+    void malformed_business_list_reports_failure_and_can_retry() {
+        SessionServer server;
+        QVERIFY(server.start());
+        FrontendAccountSession account;
+        ApiClient api(server.url(), &account);
+        QSignalSpy loaded(&api, &ApiClient::business_list_received);
+        QSignalSpy failed(&api, &ApiClient::business_list_failed);
+        for (const QByteArray body : {QByteArray("{broken"), QByteArray("[]")}) {
+            server.businesses_body = body;
+            api.get_business_list();
+            QTRY_VERIFY(!failed.isEmpty());
+            QVERIFY(failed.takeFirst().first().toString().contains("invalid business list"));
+            QVERIFY(loaded.isEmpty());
+        }
+        server.businesses_body = "{}";
+        api.get_business_list();
+        QTRY_COMPARE(loaded.count(), 1);
+        QVERIFY(failed.isEmpty());
+    }
+
+    void stalled_business_list_times_out_and_cancelled_session_stays_clear() {
+        SessionServer server;
+        server.hold_businesses = true;
+        QVERIFY(server.start());
+        FrontendAccountSession account;
+        ApiClient api(server.url(), &account);
+        QSignalSpy loaded(&api, &ApiClient::business_list_received);
+        QSignalSpy failed(&api, &ApiClient::business_list_failed);
+        api.get_business_list();
+        auto* deadline = api.findChild<QTimer*>("business_list_deadline");
+        QVERIFY(deadline);
+        auto* reply = qobject_cast<QNetworkReply*>(deadline->parent());
+        QVERIFY(reply);
+        QVERIFY(!reply->request().attribute(QNetworkRequest::Http2AllowedAttribute).toBool());
+        QCOMPARE(deadline->interval(), 45000);
+        QTRY_VERIFY(server.pending_businesses != nullptr);
+        deadline->start(1);
+        QTRY_COMPARE(failed.count(), 1);
+        QVERIFY(failed.first().first().toString().contains("timed out"));
+        QVERIFY(loaded.isEmpty());
+        server.pending_businesses.reset();
+        server.hold_businesses = false;
+        api.get_business_list();
+        QTRY_COMPARE(loaded.count(), 1);
+        loaded.clear();
+        failed.clear();
+        server.hold_businesses = true;
+        api.get_business_list();
+        QTRY_VERIFY(server.pending_businesses != nullptr);
+        api.clear_session();
+        server.pending_businesses->write(QJsonDocument(QJsonObject{}));
+        server.pending_businesses.reset();
+        QTest::qWait(30);
+        QVERIFY(loaded.isEmpty());
+        QVERIFY(failed.isEmpty());
+    }
+
     void hosted_demo_export_and_saved_export_use_only_anonymous_endpoint() {
         SessionServer server;
         QVERIFY(server.start());
