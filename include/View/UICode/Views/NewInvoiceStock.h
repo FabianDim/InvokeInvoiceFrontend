@@ -59,6 +59,7 @@ class NewInvoiceStock : public QWidget {
     QDoubleSpinBox* margin_;
     QLineEdit* unit_;
     QLineEdit* keywords_;
+    QLineEdit* product_id_;
     QLabel* status_label_;
     QLabel* totals_label_;
     bool gst_registered_ = false;

@@ -58,3 +58,36 @@ Account IDs are ObjectId hex strings. Demo IDs never grant access to account rec
 Account stock changes and rendering remain server-authoritative. Stock shortages
 return HTTP 409 with `code: stock_shortage` and an `items` array. JSON field names
 are case-sensitive. The public client source describes existing account payloads.
+
+## Stock product IDs
+
+Stock create, update and list payloads also support an optional `ProductID` text
+field (up to 100 characters). It is a user-entered product code/SKU, separate from
+the record's `_id`. Leading zeros are preserved and surrounding whitespace is
+trimmed. Omitting it on update preserves the existing value; an empty string
+clears it. Existing stock without this field is returned with an empty Product ID.
+
+## Customer details
+
+The desktop calls clients **Customers**. Existing `/data/client`, `/client/update`,
+`clients`, and `ClientID` API names are unchanged. `Name` is the display name;
+`ContactName`, `Email`, `Phone`, and `Address` remain the invoice-facing fields.
+
+Customer create, update, and list payloads also support an optional `CustomerDetails`
+object. It contains `Type` (`Business` or `Individual`), `CompanyName`, `Salutation`,
+`FirstName`, `LastName`, `Mobile`, `Website`, `BillingAddress`, `ShippingAddress`,
+`Contacts`, and `Remarks`. Address objects contain `Attention`, `Country`, `Street1`,
+`Street2`, `City`, `State`, `Postcode`, `Phone`, and `Fax`. Each of up to 20 additional
+contacts contains `Salutation`, `FirstName`, `LastName`, `Email`, `Phone`, and `Mobile`.
+Custom fields are not supported. Optional text may be blank. Ordinary fields have a
+200-character limit; street lines and website allow 2,000; remarks allow 10,000.
+Invalid types, websites, contact emails, or limits return HTTP 400.
+
+Omitting `CustomerDetails` during an update preserves existing metadata. Supplying
+it replaces that object; an empty `Contacts` array clears additional contacts.
+The desktop derives the invoice address from the billing address. Shipping details,
+additional contacts, mobile, website, and remarks are not added to invoice PDFs.
+Existing records remain editable without guessing first/last-name or address parts.
+
+Deploy the backend with `CustomerDetails` support before distributing the updated
+desktop; older servers do not persist this additional metadata.

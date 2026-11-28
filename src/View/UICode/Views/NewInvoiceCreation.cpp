@@ -37,11 +37,11 @@ void InvoiceDetailsInput::create_page_layout() {
     form->setHorizontalSpacing(16);
     form->setVerticalSpacing(10);
     form->setColumnStretch(1, 1);
-    auto* client_label = UiStyle::field_label("Client", content);
+    auto* client_label = UiStyle::field_label("Customer", content);
     client_select_ = new QComboBox(content);
     client_select_->setObjectName("invoice_client");
     client_select_->setProperty("role", "input");
-    client_select_->setAccessibleName("Invoice client");
+    client_select_->setAccessibleName("Invoice customer");
     client_select_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     // Leave space for Refresh beside the picker with wider fallback fonts too.
     client_select_->setMinimumContentsLength(10);
@@ -180,7 +180,7 @@ void InvoiceDetailsInput::business_selected(const QJsonObject& business) {
     if (id != business_id_ || id.isEmpty()) {
         business_id_ = id;
         client_select_->clear();
-        client_select_->addItem("Choose a client");
+        client_select_->addItem("Choose a customer");
         client_select_->setEnabled(false);
         UiStyle::message(client_status_, id.isEmpty() ? "Choose a business on the dashboard first." : "");
         update_client_selection();
@@ -200,10 +200,10 @@ void InvoiceDetailsInput::load_clients(bool refresh) {
     if (business_id_.isEmpty())
         return;
     client_select_->clear();
-    client_select_->addItem("Loading clients...");
+    client_select_->addItem("Loading customers...");
     client_select_->setEnabled(false);
     refresh_clients_->setEnabled(false);
-    UiStyle::message(client_status_, "Loading clients...");
+    UiStyle::message(client_status_, "Loading customers...");
     update_client_selection();
     emit clients_requested(refresh);
 }
@@ -217,7 +217,7 @@ void InvoiceDetailsInput::populate_clients(const QJsonDocument& items) {
     {
         const QSignalBlocker blocker(client_select_);
         client_select_->clear();
-        client_select_->addItem("Choose a client");
+        client_select_->addItem("Choose a customer");
         QVector<QJsonObject> clients;
         for (const auto& value : data.value("clients").toArray()) {
             const auto client = value.toObject();
@@ -229,7 +229,7 @@ void InvoiceDetailsInput::populate_clients(const QJsonDocument& items) {
         });
         for (const auto& client : clients) {
             const auto id = client.value("_id").toString();
-            client_select_->addItem(client.value("Name").toString("Client"), client);
+            client_select_->addItem(client.value("Name").toString("Customer"), client);
             if (id == previous_id)
                 client_select_->setCurrentIndex(client_select_->count() - 1);
         }
@@ -238,7 +238,7 @@ void InvoiceDetailsInput::populate_clients(const QJsonDocument& items) {
     client_select_->setEnabled(has_clients);
     refresh_clients_->setEnabled(true);
     UiStyle::message(client_status_,
-        has_clients ? "" : "No clients saved for this business. Create a client from the dashboard first.");
+        has_clients ? "" : "No customers saved for this business. Create a customer from the dashboard first.");
     update_client_selection();
 }
 
@@ -260,9 +260,9 @@ void InvoiceDetailsInput::update_client_selection() {
 void InvoiceDetailsInput::set_client_error(const QString& message) {
     Infrastructure::Logging::Operation operation(Infrastructure::Logging::ui(), "InvoiceDetailsInput.set_client_error");
     client_select_->clear();
-    client_select_->addItem("Clients unavailable");
+    client_select_->addItem("Customers unavailable");
     client_select_->setEnabled(false);
-    UiStyle::message(client_status_, "Could not load clients: " + message + " Use Refresh clients to try again.");
+    UiStyle::message(client_status_, "Could not load customers: " + message + " Use Refresh customers to try again.");
     refresh_clients_->setEnabled(!business_id_.isEmpty());
     update_client_selection();
 }

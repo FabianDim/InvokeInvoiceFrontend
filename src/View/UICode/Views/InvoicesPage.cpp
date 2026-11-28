@@ -26,7 +26,7 @@ InvoicesPage::InvoicesPage(QWidget* parent) : QWidget(parent) {
     layout->addWidget(detail_);
     table_ = new QTableWidget(0, 6, content);
     table_->setObjectName("invoice_records");
-    table_->setHorizontalHeaderLabels({"Invoice", "Client", "Issued", "Due date", "Total", "Payment"});
+    table_->setHorizontalHeaderLabels({"Invoice", "Customer", "Issued", "Due date", "Total", "Payment"});
     table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     table_->setSelectionMode(QAbstractItemView::SingleSelection);
     table_->setStyleSheet(
@@ -177,7 +177,7 @@ void InvoicesPage::update_actions() {
         const bool overdue = !record.value("Paid").toBool() && due.isValid() && due < QDate::currentDate();
         const auto payment = record.value("Paid").toBool() ? "Paid" : overdue ? "Unpaid - OVERDUE" : "Unpaid";
         selection_->setText(QString("Selected invoice: %1\n%2 | %3")
-            .arg(record.value("InvoiceNumber").toString(), record.value("ClientName").toString("Client not recorded"), payment));
+            .arg(record.value("InvoiceNumber").toString(), record.value("ClientName").toString("Customer not recorded"), payment));
     }
     refresh_->setEnabled(!busy_ && !business_id_.isEmpty());
     previous_->setEnabled(!busy_ && offset_ > 0); next_->setEnabled(!busy_ && more_);

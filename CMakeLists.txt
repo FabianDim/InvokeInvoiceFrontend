@@ -85,6 +85,8 @@ add_library(frontend_core OBJECT
     include/View/StyleSheet.h
     include/View/UICode/Views/BusinessInvoiceChoice.h
     include/View/UICode/Views/ClientPreferencesForm.h
+    include/View/UICode/Views/CustomerForm.h
+    include/Domain/Business/Clients/CustomerDetails.h
     include/View/UICode/Views/Dashboard.h
     include/View/UICode/Views/DefaultInvoiceSettings.h
     include/View/UICode/Views/FilenameTemplateEdit.h

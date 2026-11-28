@@ -1,4 +1,5 @@
 #pragma once
+#include "Domain/Business/Clients/CustomerDetails.h"
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QRegularExpression>
@@ -9,6 +10,7 @@ namespace Domain::Clients {
 // Empty terms and absent stock prices inherit the current business defaults.
 inline QJsonObject preferences(const QJsonObject& data) {
     QJsonObject result;
+    if (data.contains("CustomerDetails")) result["CustomerDetails"] = customer_details(data.value("CustomerDetails"));
     if (data.contains("ContactName")) {
         if (!data.value("ContactName").isString() || data.value("ContactName").toString().size() > 200)
             throw std::invalid_argument("Enter a contact name of at most 200 characters.");
