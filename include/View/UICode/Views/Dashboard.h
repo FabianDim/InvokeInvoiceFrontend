@@ -37,6 +37,7 @@ class Dashboard : public QWidget {
     void update_business_selection();
     QComboBox* business_select_;
     QLabel* loading_label_;
+    QPushButton* retry_businesses_button_;
     QPushButton* invoice_button;
     QPushButton* client_button;
     QPushButton* business_button;
@@ -49,6 +50,7 @@ class Dashboard : public QWidget {
   signals:
     void dash_navigation(Page page);
     void business_chosen(const QJsonObject& business);
+    void retry_businesses();
 };
 } // namespace Views
 } // namespace App

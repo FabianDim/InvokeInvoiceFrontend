@@ -106,6 +106,8 @@ add_library(frontend_core OBJECT
 target_include_directories(frontend_core PUBLIC include api "${CMAKE_CURRENT_BINARY_DIR}/generated")
 target_link_libraries(frontend_core PUBLIC Qt6::Widgets Qt6::Network Qt6Keychain::Qt6Keychain OpenSSL::Crypto fmt::fmt)
 qt_add_executable(InvokeInvoiceSystem src/View/InvokeInvoiceSystem.cpp)
+target_compile_definitions(InvokeInvoiceSystem PRIVATE
+    INVOICE_DEVELOPMENT_BUILD=$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>)
 target_link_libraries(InvokeInvoiceSystem PRIVATE frontend_core)
 set_target_properties(InvokeInvoiceSystem PROPERTIES WIN32_EXECUTABLE ON MACOSX_BUNDLE ON)
 qt_import_plugins(InvokeInvoiceSystem INCLUDE Qt6::QJpegPlugin)

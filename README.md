@@ -38,6 +38,14 @@ use `x64-static-release`, then run:
 ```
 
 The executable and settings retain the `InvokeInvoiceSystem` product name.
+For day-to-day development, double-click **Start Development.cmd**. It builds
+the latest local source with `x64-relwithdebinfo` and opens that exact EXE only
+after a successful build. Close the development app before rebuilding it.
+Debug and RelWithDebInfo builds never hand off to cached releases or check for
+release updates. The window displays a development-build indicator. Release
+builds retain the signed updater; `--development` explicitly disables it for
+one launch. Backend selection still follows `INVOICE_API_URL` as described below.
+
 The default API is `https://invoice-backend-app-69d26786220b.herokuapp.com`.
 When launching the frontend with VS Code's CMake Tools debugger in the combined
 workspace, it uses `http://127.0.0.1:1234` instead. Start the local backend first;
