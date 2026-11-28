@@ -1,6 +1,7 @@
 #pragma once
 #include "View/UICode/Views/InvoicePreferencesForm.h"
 #include "View/UICode/Views/ClientPreferencesForm.h"
+#include "View/UICode/Views/CustomerForm.h"
 #include "Domain/Records/RecordDefinition.h"
 
 #include <QWidget>
@@ -60,6 +61,7 @@ class ManagementForm : public QWidget {
     QCheckBox* gst_registered_ = nullptr;
     InvoicePreferencesForm* invoice_preferences_ = nullptr;
     ClientPreferencesForm* client_preferences_ = nullptr;
+    CustomerForm* customer_form_ = nullptr;
     QString client_business_id_;
     bool saving_ = false;
     bool add_another_ = false;

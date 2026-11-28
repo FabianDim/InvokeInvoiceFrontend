@@ -5,11 +5,19 @@
 #include <stdexcept>
 
 namespace Domain::Stock {
+inline QString product_id(const QJsonValue& value) {
+    if (value.isUndefined()) return {};
+    if (!value.isString() || value.toString().size() > 100)
+        throw std::invalid_argument("Product ID must be text of at most 100 characters.");
+    return value.toString().trimmed();
+}
 // Return only editable fields. Identities and ownership are never part of the update.
 inline QJsonObject stock_edit_values(const QJsonObject& data) {
     const auto name = data.value("Name").toString().trimmed();
     if (name.isEmpty() || name.size() > 200) throw std::invalid_argument("Enter a stock name of at most 200 characters.");
     QJsonObject result{{"Name", name}};
+    // Omission by older clients preserves an existing Product ID; blank clears it.
+    if (data.contains("ProductID")) result["ProductID"] = product_id(data.value("ProductID"));
     for (const auto* field : {"Quantity", "Price", "Margin", "ExpectedQuantity"}) {
         const auto value = data.value(field);
         const auto number = value.toDouble();

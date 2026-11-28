@@ -35,12 +35,12 @@ ManagementForm::ManagementForm(const QString& title,
     : QWidget(parent), resource_(resource), original_record_(record), editing_(editing) {
     if (resource != "account") definition_ = &Domain::Records::RecordDefinition::for_resource(resource);
     const auto editable_record = definition_ ? definition_->editor_record(record) : record;
-    auto* content = UiStyle::page_content(this, 760, !editing_);
+    auto* content = UiStyle::page_content(this, resource == "client" ? 1060 : 760, !editing_);
     auto* layout = new QVBoxLayout(content);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(12);
     if (editing_) layout->setAlignment(Qt::AlignTop);
-    auto* heading = new QLabel(title, this);
+    auto* heading = new QLabel(resource == "client" ? (editing_ ? "Edit customer" : "Add customer") : title, this);
     heading->setObjectName("titleLabel");
     heading->setProperty("role", "title");
     heading->setAlignment(Qt::AlignLeft);
@@ -49,7 +49,7 @@ ManagementForm::ManagementForm(const QString& title,
     layout->addWidget(heading);
     const auto description = resource_ == "account"    ? "Keep your personal details up to date."
                              : resource_ == "business" ? "The details behind every invoice you send."
-                             : resource_ == "client"   ? "Make room for your next working relationship."
+                             : resource_ == "client"   ? "Contact details, addresses and pricing, together in one place."
                                                        : "Keep your products and pricing in one place.";
     auto* subtitle = UiStyle::label(description, content, "subtitle");
     subtitle->setWordWrap(true);
@@ -61,6 +61,7 @@ ManagementForm::ManagementForm(const QString& title,
     form_layout_->setSpacing(10);
     form_layout_->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
     for (const auto& field : fields) {
+        if (resource_ == "client") break;
         if (field == "Country") {
             country_ = new QComboBox(this);
             country_->setObjectName("form_country");
@@ -127,6 +128,8 @@ ManagementForm::ManagementForm(const QString& title,
             input->setToolTip("Leave blank to use 0.");
         if (resource_ == "stock" && field == "Unit")
             input->setToolTip("How this item is sold, e.g. each, hour, metre or box.");
+        if (resource_ == "stock" && field == "Product ID")
+            input->setToolTip("Your product code or SKU, e.g. AUDIO-001. Optional; leading zeros are preserved.");
         if (resource_ == "stock" && field == "Margin")
             input->setToolTip("Profit as a percentage of the selling price, for your records only. It does not change the invoice price. Leave blank for 0.");
         label->setObjectName("form_label");
@@ -137,10 +140,11 @@ ManagementForm::ManagementForm(const QString& title,
     }
     layout->addLayout(form_layout_);
     if (resource_ == "client") {
-        client_preferences_ = new ClientPreferencesForm(content);
-        client_preferences_->set_values(record);
+        customer_form_ = new CustomerForm(content, editing_);
+        customer_form_->set_values(record);
+        client_preferences_ = customer_form_->preferences();
         client_business_id_ = record.value("BusinessID").toString();
-        layout->addWidget(client_preferences_);
+        layout->addWidget(customer_form_);
     }
     if (resource_ == "business") {
         invoice_preferences_ = new InvoicePreferencesForm(content, false);
@@ -183,7 +187,7 @@ ManagementForm::ManagementForm(const QString& title,
 
     UiStyle::form(form_layout_);
     auto* buttons = new UiStyle::ActionRow(content);
-    auto* save = new QPushButton(editing_ ? "Save changes" : resource_ == "client" ? "Save client" : "Save", this);
+    auto* save = new QPushButton(editing_ ? "Save changes" : resource_ == "client" ? "Save customer" : "Save", this);
     auto* back = new QPushButton(editing_ ? "Cancel" : "Back", this);
     save->setObjectName(editing_ ? resource_ + "_edit_save" : "register_button_");
     back->setObjectName(editing_ ? resource_ + "_edit_cancel" : "login_button_");
@@ -249,11 +253,15 @@ void ManagementForm::submit_form() {
         }
     }
     QJsonObject data;
+    if (customer_form_) {
+        try { data = customer_form_->values(); }
+        catch (const std::exception& error) { set_status(QString::fromUtf8(error.what())); return; }
+    }
     for (int index = 0; index < inputs_.size(); ++index) {
         const QString key = field_names_[index];
         data[key] = inputs_[index]->text().trimmed();
     }
-    if (!editing_ && (resource_ == "business" || resource_ == "client")) {
+    if (!editing_ && resource_ == "business") {
         data["Country"] = country_ ? country_->currentData().toString() : QString{};
         QStringList address;
         const QStringList address_fields = resource_ == "client"
@@ -314,6 +322,7 @@ void ManagementForm::submit_form() {
             canonical["ExpectedQuantity"] = editing_ ? original_record_.value("Quantity") : QJsonValue(0);
         try {
             const auto values = definition_->edit_values(canonical);
+            if (resource_ == "stock") data["ProductID"] = values.value("ProductID");
             if (editing_) {
                 data = canonical;
                 data["_id"] = original_record_.value("_id");
@@ -333,6 +342,7 @@ void ManagementForm::submit_form() {
 }
 
 void ManagementForm::clear_form() {
+    if (customer_form_) customer_form_->set_values({});
     if (logo_path_) {
         logo_path_->clear();
         logo_data_.clear();
@@ -388,6 +398,7 @@ void ManagementForm::set_saving(bool saving) {
         gst_registered_->setEnabled(!saving);
     if (invoice_preferences_) invoice_preferences_->setEnabled(!saving);
     if (client_preferences_) client_preferences_->setEnabled(!saving);
+    if (customer_form_) customer_form_->setEnabled(!saving);
 }
 
 void ManagementForm::save_succeeded() {
@@ -400,7 +411,7 @@ void ManagementForm::save_succeeded() {
     if (resource_ != "account" && !add_another_)
         emit navigate_to(Page::Dashboard);
     else
-        set_status(resource_ == "account" ? "Account saved." : "Saved. You can add another " + resource_ + ".");
+        set_status(resource_ == "account" ? "Account saved." : "Saved. You can add another " + (resource_ == "client" ? "customer" : resource_) + ".");
 }
 
 void ManagementForm::save_failed(const QString& message) {
@@ -447,6 +458,7 @@ void ManagementForm::set_status(const QString& message) {
 
 void App::Views::ManagementForm::set_offline(bool offline) {
     set_saving(false);
+    if (customer_form_) customer_form_->set_values({});
     if (client_preferences_) {
         client_preferences_->set_values({});
         client_preferences_->set_stock({});
@@ -462,6 +474,6 @@ void App::Views::ManagementForm::set_offline(bool offline) {
     if (logo_path_)
         logo_path_->clear();
     logo_data_.clear();
-    findChild<QPushButton*>("register_button_")->setText(offline ? "Use in demo" : "Save");
+    findChild<QPushButton*>("register_button_")->setText(offline ? "Use in demo" : resource_ == "client" ? "Save customer" : "Save");
     set_status(offline ? "This record is only kept for the current demo." : "");
 }

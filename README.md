@@ -48,6 +48,13 @@ no MongoDB credentials. Account requests and demo exports use the same service U
 
 ## Tests
 
+Customer creation and editing use Overview, Addresses, Contacts, Pricing and Notes
+tabs. Billing and shipping addresses are separate; copying billing details is a
+one-time copy. A display name is the only required field. Additional contacts and
+notes are saved with the customer but are not printed on invoices. Existing
+customer records and the `client` API resource names remain compatible. Deploy the
+matching backend before using these fields with account records.
+
 ```powershell
 cmake --build --preset x64-release --target all-tests
 ctest --test-dir out/build/x64-release -L local --output-on-failure

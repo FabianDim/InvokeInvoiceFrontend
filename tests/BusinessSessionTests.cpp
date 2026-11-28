@@ -149,6 +149,152 @@ class BusinessSessionTests : public QObject {
     QTemporaryDir settings_directory_;
   private slots:
 
+    void stock_product_id_create_edit_clear_and_legacy_update() {
+        const auto& definition = Domain::Records::RecordDefinition::for_resource("stock");
+        App::Views::ManagementForm form(definition);
+        const QMap<QString, QString> values{{"Name", "Mixer"}, {"Product ID", "  00012-A  "}, {"Price", "50"}, {"Unit", "each"}};
+        for (auto* field : form.findChildren<QLineEdit*>("form_input"))
+            if (values.contains(field->placeholderText())) field->setText(values.value(field->placeholderText()));
+        QSignalSpy submitted(&form, &App::Views::ManagementForm::submit_resource);
+        form.findChild<QPushButton*>("register_button_")->click();
+        QCOMPARE(submitted.size(), 1);
+        const auto payload = qvariant_cast<QJsonDocument>(submitted.first().at(1)).object();
+        QCOMPARE(payload.value("ProductID").toString(), "00012-A");
+        Application::Invoices::OfflineInvoiceSession demo;
+        const auto business = demo.save("business", {{"Business name", "Product test"}}, {});
+        const auto stock = demo.save("stock", payload, business);
+        auto record = demo.stocks.first().toObject();
+        QCOMPARE(record.value("ProductID").toString(), "00012-A");
+        QCOMPARE(record.value("_id").toString(), stock);
+        App::Views::ManagementForm editor(definition, record);
+        auto* product = editor.findChild<QLineEdit*>("stock_edit_productid");
+        QVERIFY(product); QCOMPARE(product->text(), "00012-A"); product->clear();
+        QSignalSpy updated(&editor, &App::Views::ManagementForm::submit_resource);
+        editor.findChild<QPushButton*>("stock_edit_save")->click();
+        QCOMPARE(updated.size(), 1);
+        auto update = qvariant_cast<QJsonDocument>(updated.first().at(1)).object();
+        auto legacy = update; legacy.remove("ProductID");
+        demo.update_record(business, Domain::Records::RecordUpdate("stock", legacy));
+        QCOMPARE(demo.stocks.first().toObject().value("ProductID").toString(), "00012-A");
+        demo.update_record(business, Domain::Records::RecordUpdate("stock", update));
+        QCOMPARE(demo.stocks.first().toObject().value("ProductID").toString(), "");
+        QVERIFY_EXCEPTION_THROWN(Domain::Stock::product_id(123), std::invalid_argument);
+        QVERIFY_EXCEPTION_THROWN(Domain::Stock::product_id(QString(101, 'x')), std::invalid_argument);
+    }
+
+    void customer_details_round_trip_and_legacy_compatibility() {
+        const auto& definition = Domain::Records::RecordDefinition::for_resource("client");
+        App::Views::ManagementForm form(definition);
+        auto edit = [&](const char* name, const QString& value) {
+            auto* field = form.findChild<QLineEdit*>(name); QVERIFY(field); field->setText(value);
+        };
+        for (auto* field : form.findChildren<QLineEdit*>("form_input"))
+            if (field->placeholderText() == "Name") field->setText("Northside Audio");
+        edit("customer_company_name", "Northside Audio Pty Ltd");
+        edit("customer_salutation", "Ms"); edit("customer_first_name", "Alex"); edit("customer_last_name", "Taylor");
+        edit("customer_mobile", "0400 000 000"); edit("customer_website", "https://example.invalid");
+        edit("customer_billing_attention", "Accounts"); edit("customer_billing_street1", "10 Example Street");
+        edit("customer_billing_street2", "Level 2"); edit("customer_billing_city", "Sydney");
+        edit("customer_billing_state", "NSW"); edit("customer_billing_postcode", "2000"); edit("customer_billing_country", "Australia");
+        form.findChild<QPushButton*>("customer_copy_billing")->click();
+        QCOMPARE(form.findChild<QLineEdit*>("customer_shipping_street1")->text(), "10 Example Street");
+        edit("customer_shipping_street1", "20 Delivery Road");
+        QCOMPARE(form.findChild<QLineEdit*>("customer_billing_street1")->text(), "10 Example Street");
+        form.findChild<QPushButton*>("customer_add_contact")->click();
+        edit("customer_contact_firstname", "Sam"); edit("customer_contact_email", "sam@example.invalid");
+        form.findChild<QPlainTextEdit*>("customer_notes")->setPlainText("Deliver after 9am.\nCall before arrival.");
+        QSignalSpy submissions(&form, &App::Views::ManagementForm::submit_resource);
+        form.findChild<QPushButton*>("register_button_")->click();
+        QCOMPARE(submissions.size(), 1);
+        auto record = qvariant_cast<QJsonDocument>(submissions.first().at(1)).object();
+        QCOMPARE(record.value("ContactName").toString(), "Ms Alex Taylor");
+        QCOMPARE(record.value("Address").toString(), "Accounts, 10 Example Street, Level 2, Sydney, NSW, 2000, Australia");
+        const auto details = record.value("CustomerDetails").toObject();
+        QCOMPARE(details.value("Contacts").toArray().size(), 1);
+        QVERIFY(!details.contains("CustomFields"));
+        record["_id"] = "65b000000000000000000001";
+        record["BusinessID"] = "65a000000000000000000001";
+        App::Views::ManagementForm reopened(definition, record);
+        QSignalSpy updates(&reopened, &App::Views::ManagementForm::submit_resource);
+        reopened.findChild<QPushButton*>("client_edit_save")->click();
+        QCOMPARE(updates.size(), 1);
+        QCOMPARE(qvariant_cast<QJsonDocument>(updates.first().at(1)).object().value("CustomerDetails").toObject(), details);
+        // Older clients omit metadata when editing. Such edits must preserve it.
+        const QJsonObject legacy{{"Name", "Renamed customer"}, {"Phone", ""}, {"Email", ""}, {"Address", "Original address"}};
+        const Domain::Records::RecordUpdate old_update("client", legacy);
+        QCOMPARE(old_update.apply_to(record).value("CustomerDetails").toObject(), details);
+        App::Views::CustomerForm legacy_updated(nullptr);
+        legacy_updated.set_values(old_update.apply_to(record));
+        QCOMPARE(legacy_updated.values().value("Address").toString(), "Original address");
+        auto changed_contact = old_update.apply_to(record);
+        changed_contact["ContactName"] = "New primary contact";
+        legacy_updated.set_values(changed_contact);
+        QCOMPARE(legacy_updated.values().value("ContactName").toString(), "New primary contact");
+        // Legacy addresses and full contact names must not be split or truncated.
+        App::Views::CustomerForm older(nullptr);
+        older.set_values({{"Name", "Older customer"}, {"ContactName", "Alex van der Meer"}, {"Address", QString(400, 'a')}});
+        QCOMPARE(older.values().value("ContactName").toString(), "Alex van der Meer");
+        QCOMPARE(older.values().value("Address").toString(), QString(400, 'a'));
+        older.set_values({});
+        QVERIFY(older.findChild<QLineEdit*>("customer_first_name")->text().isEmpty());
+    }
+
+    void customer_details_validation_and_contact_removal() {
+        App::Views::CustomerForm form(nullptr);
+        QVERIFY_EXCEPTION_THROWN(form.values(), std::invalid_argument);
+        form.set_values({{"Name", "Customer"}});
+        form.findChild<QPushButton*>("customer_add_contact")->click();
+        form.findChild<QLineEdit*>("customer_contact_email")->setText("invalid");
+        QVERIFY_EXCEPTION_THROWN(form.values(), std::invalid_argument);
+        QCOMPARE(form.findChild<QTabWidget*>("customer_tabs")->currentIndex(), 2);
+        form.findChild<QPushButton*>("customer_remove_contact")->click();
+        QVERIFY(form.values().value("CustomerDetails").toObject().value("Contacts").toArray().isEmpty());
+        form.findChild<QLineEdit*>("customer_website")->setText("file:///local/path");
+        QVERIFY_EXCEPTION_THROWN(form.values(), std::invalid_argument);
+        form.findChild<QLineEdit*>("customer_website")->clear();
+        form.findChild<QPlainTextEdit*>("customer_notes")->setPlainText(QString(10001, 'a'));
+        QVERIFY_EXCEPTION_THROWN(form.values(), std::invalid_argument);
+        QCOMPARE(form.findChild<QTabWidget*>("customer_tabs")->currentIndex(), 4);
+        QVERIFY_EXCEPTION_THROWN(Domain::Clients::customer_details(QJsonArray{}), std::invalid_argument);
+        QVERIFY_EXCEPTION_THROWN(Domain::Clients::customer_details(QJsonObject{{"Type", "other"}}), std::invalid_argument);
+        QJsonArray too_many;
+        for (int i = 0; i < 21; ++i) too_many.append(QJsonObject{});
+        QVERIFY_EXCEPTION_THROWN(Domain::Clients::customer_details(QJsonObject{{"Type", "Business"}, {"Contacts", too_many}}), std::invalid_argument);
+    }
+
+    void customer_ui_capture() {
+        const auto output = qEnvironmentVariable("INVOICE_CUSTOMER_PREVIEW_DIR");
+        if (output.isEmpty()) QSKIP("Set INVOICE_CUSTOMER_PREVIEW_DIR for customer layout previews.");
+        QVERIFY(QDir().mkpath(output));
+        App::Views::ManagementForm form(Domain::Records::RecordDefinition::for_resource("client"));
+        form.client_business_selected({{"_id", "65a000000000000000000001"}});
+        form.populate_client_stock(business_items("65a000000000000000000001"));
+        form.findChild<QPushButton*>("customer_add_contact")->click();
+        auto* tabs = form.findChild<QTabWidget*>("customer_tabs");
+        for (auto* edit : form.findChildren<QLineEdit*>("form_input"))
+            if (edit->placeholderText() == "Name") edit->setText("Northside Audio");
+        form.findChild<QLineEdit*>("customer_company_name")->setText("Northside Audio Pty Ltd");
+        form.findChild<QLineEdit*>("customer_first_name")->setText("Alex");
+        form.findChild<QLineEdit*>("customer_last_name")->setText("Taylor");
+        form.findChild<QLineEdit*>("customer_billing_street1")->setText("10 Example Street");
+        form.findChild<QLineEdit*>("customer_billing_city")->setText("Sydney");
+        form.findChild<QLineEdit*>("customer_billing_country")->setText("Australia");
+        form.show();
+        for (const int width : {1100, 640}) {
+            form.resize(width, 900);
+            for (int tab = 0; tab < tabs->count(); ++tab) {
+                tabs->setCurrentIndex(tab); QTest::qWait(60);
+                auto* scroll = form.findChild<QScrollArea*>("page_scroll");
+                QCOMPARE(scroll->horizontalScrollBar()->maximum(), 0);
+                scroll->verticalScrollBar()->setValue(0);
+                const auto prefix = output + QString("/%1-%2").arg(width).arg(tab);
+                QVERIFY(form.grab().save(prefix + ".png"));
+                scroll->verticalScrollBar()->setValue(scroll->verticalScrollBar()->maximum()); QTest::qWait(20);
+                QVERIFY(form.grab().save(prefix + "-bottom.png"));
+            }
+        }
+    }
+
     void client_preferences_create_edit_and_reset() {
         const auto& definition = Domain::Records::RecordDefinition::for_resource("client");
         const auto fields = definition.form_fields();
@@ -161,11 +307,15 @@ class BusinessSessionTests : public QObject {
         form.populate_client_stock(business_items(business));
         for (auto* input : form.findChildren<QLineEdit*>("form_input")) {
             if (input->placeholderText() == "Name") input->setText("Customer Pty Ltd");
-            if (input->placeholderText() == "Contact name") input->setText("Alex Taylor");
-            if (input->placeholderText() == "Street address") input->setText("10 Example Street, Sydney");
-            if (input->placeholderText() == "Postcode") input->setText("2000");
-            if (input->placeholderText() == "State or province") input->setText("NSW");
+
+
+
+
         }
+        form.findChild<QLineEdit*>("customer_first_name")->setText("Alex Taylor");
+        form.findChild<QLineEdit*>("customer_billing_street1")->setText("10 Example Street, Sydney");
+        form.findChild<QLineEdit*>("customer_billing_postcode")->setText("2000");
+        form.findChild<QLineEdit*>("customer_billing_state")->setText("NSW");
         auto* terms = form.findChild<QComboBox*>("client_payment_terms");
         terms->setCurrentIndex(terms->findData("14"));
         form.findChild<QLineEdit*>("client_stock_price")->setText("9.25");
@@ -175,7 +325,7 @@ class BusinessSessionTests : public QObject {
         auto data = qvariant_cast<QJsonDocument>(submitted.first().at(1)).object();
         QCOMPARE(data.value("Contact name").toString(), "Alex Taylor");
         QCOMPARE(data.value("ContactName").toString(), "Alex Taylor");
-        QCOMPARE(data.value("Address").toString(), "10 Example Street, Sydney, 2000, NSW");
+        QCOMPARE(data.value("Address").toString(), "10 Example Street, Sydney, NSW, 2000");
         QCOMPARE(data.value("PaymentTerms").toString(), "14");
         QCOMPARE(data.value("StockPrices").toObject().value(stock).toDouble(), 9.25);
         form.save_failed("Retry");
@@ -191,7 +341,7 @@ class BusinessSessionTests : public QObject {
         data["BusinessID"] = business;
         App::Views::ManagementForm editor(definition, data);
         editor.populate_client_stock(business_items(business));
-        QCOMPARE(editor.findChild<QLineEdit*>("client_edit_contactname")->text(), "Alex Taylor");
+        QCOMPARE(editor.findChild<QLineEdit*>("customer_first_name")->text(), "Alex Taylor");
         QCOMPARE(editor.findChild<QLineEdit*>("client_stock_price")->text(), "9.25");
         editor.findChild<QLineEdit*>("client_stock_price")->clear();
         editor.findChild<QComboBox*>("client_payment_terms")->setCurrentIndex(0);
@@ -546,7 +696,7 @@ class BusinessSessionTests : public QObject {
         tabs->setCurrentIndex(tab);
         auto* table = qobject_cast<QTableWidget*>(tabs->currentWidget());
         auto* edit = page.findChild<QPushButton*>("edit_record");
-        QCOMPARE(edit->text(), "Edit " + resource);
+        QCOMPARE(edit->text(), "Edit " + (resource == "client" ? "customer" : resource));
         QVERIFY(!edit->isEnabled());
         table->selectRow(0);
         QVERIFY(edit->isEnabled());
@@ -556,10 +706,10 @@ class BusinessSessionTests : public QObject {
         QPointer<QDialog> popup = page.findChild<QDialog*>(prefix + "dialog");
         QVERIFY(popup);
         QVERIFY(popup->findChild<App::Views::ManagementForm*>());
-        QCOMPARE(popup->windowTitle(), "Edit " + resource);
+        QCOMPARE(popup->windowTitle(), "Edit " + (resource == "client" ? "customer" : resource));
         QVERIFY(!popup->findChild<QLineEdit*>(prefix + "quantity"));
         const auto name = prefix + (resource == "business" ? "businessname" : "name");
-        const auto address = prefix + (resource == "business" ? "businessaddress" : "address");
+        const auto address = resource == "business" ? prefix + "businessaddress" : QString("customer_billing_street1");
         QCOMPARE(popup->findChild<QLineEdit*>(address)->text(), resource == "business" ? "Original address" : "Client address");
         popup->findChild<QLineEdit*>(name)->clear();
         popup->findChild<QPushButton*>(prefix + "save")->click();
@@ -703,6 +853,7 @@ class BusinessSessionTests : public QObject {
         QVERIFY(popup);
         QCOMPARE(popup->findChild<QLineEdit*>("stock_edit_name")->text(), "Original");
         QCOMPARE(popup->findChild<QLineEdit*>("stock_edit_margin")->text(), "25");
+        popup->findChild<QLineEdit*>("stock_edit_productid")->setText("00012-A");
         popup->findChild<QLineEdit*>("stock_edit_name")->setText("Changed");
         popup->findChild<QLineEdit*>("stock_edit_quantity")->setText("2.5");
         popup->findChild<QPushButton*>("stock_edit_save")->click();
@@ -726,6 +877,7 @@ class BusinessSessionTests : public QObject {
         QCOMPARE(table->item(0, 1)->text(), "14");
         QCOMPARE(table->item(0, 3)->text(), "30%");
         QCOMPARE(table->item(0, 5)->text(), "copper, pipe");
+        QCOMPARE(table->item(0, 6)->text(), "00012-A");
         table->selectRow(0);
         page.findChild<QPushButton*>("edit_record")->click();
         popup = page.findChild<QDialog*>("stock_edit_dialog");
@@ -1775,9 +1927,9 @@ class BusinessSessionTests : public QObject {
         stock.save_succeeded();
         QCOMPARE(navigation.count(), 1);
         App::Views::ManagementForm client("Client", "client", {"Name", "Country"});
-        auto* country = client.findChild<QComboBox*>("form_country");
-        QVERIFY(country); QVERIFY(!country->isEditable()); QVERIFY(country->count() > 150);
-        country->setCurrentIndex(country->findData("Australia"));
+        auto* country = client.findChild<QComboBox*>("customer_billing_country_combo");
+        QVERIFY(country); QVERIFY(country->isEditable()); QVERIFY(country->count() > 150);
+        country->setCurrentIndex(country->findText("Australia"));
         client.findChild<QLineEdit*>("form_input")->setText("Customer");
         QSignalSpy data(&client, &App::Views::ManagementForm::submit_resource);
         client.findChild<QPushButton*>("register_button_")->click();
@@ -1971,7 +2123,7 @@ class BusinessSessionTests : public QObject {
         selector->setCurrentIndex(2);
         QCOMPARE(chosen.last().at(0).toJsonObject().value("_id").toString(), "65a000000000000000000002");
         QVERIFY(button(dashboard, "Create stock item")->isEnabled());
-        QVERIFY(button(dashboard, "Create new client")->isEnabled());
+        QVERIFY(button(dashboard, "Create new customer")->isEnabled());
         QVERIFY(button(dashboard, "Create new invoice")->isEnabled());
 
         dashboard.populate_business_list(business_list());
@@ -2049,7 +2201,7 @@ class BusinessSessionTests : public QObject {
             QVERIFY(window.grab().save(name + "-" + QTest::currentDataTag() + "-ui.png"));
         }
         auto* dashboard = window.dashboard_page();
-        QCOMPARE(button(*dashboard, "Create new invoice")->size(), button(*dashboard, "Create new client")->size());
+        QCOMPARE(button(*dashboard, "Create new invoice")->size(), button(*dashboard, "Create new customer")->size());
         QCOMPARE(button(*dashboard, "Configure business")->size(), button(*dashboard, "Create stock item")->size());
         window.show_page(window.new_invoice_page());
         QCoreApplication::processEvents();
@@ -2249,7 +2401,7 @@ class BusinessSessionTests : public QObject {
         page.populate_clients(QJsonDocument(empty));
         QVERIFY(!clients->isEnabled());
         QVERIFY(!next->isEnabled());
-        QVERIFY(page.findChild<QLabel*>("invoice_client_status")->text().contains("No clients saved"));
+        QVERIFY(page.findChild<QLabel*>("invoice_client_status")->text().contains("No customers saved"));
         page.populate_clients(business_items("65a000000000000000000001"));
         clients->setCurrentIndex(1);
         QVERIFY(next->isEnabled());
@@ -2308,6 +2460,7 @@ class BusinessSessionTests : public QObject {
         save->setChecked(true);
         page.findChild<QSpinBox*>("new_stock_on_hand")->setValue(100);
         page.findChild<QLineEdit*>("new_stock_unit")->setText("each");
+        page.findChild<QLineEdit*>("new_stock_product_id")->setText("00012-A");
         page.resize(800, 950);
         page.show();
         QCoreApplication::processEvents();
@@ -2319,6 +2472,8 @@ class BusinessSessionTests : public QObject {
         QCOMPARE(server.saves.size(), 1);
         QCOMPARE(server.saves.first().value("Quantity").toInt(), 100);
         QCOMPARE(server.saves.first().value("Unit").toString(), "each");
+        QCOMPARE(server.saves.first().value("ProductID").toString(), "00012-A");
+        QVERIFY(page.findChild<QLineEdit*>("new_stock_product_id")->text().isEmpty());
         QCOMPARE(server.saves.first().value("BusinessID").toString(), "65a000000000000000000001");
         QCOMPARE(page.stock_items.last().toObject().value("Quantity").toInt(), 3);
         QCOMPARE(page.stock_items.last().toObject().value("_id").toString(), "65c000000000000000000002");
@@ -2532,8 +2687,8 @@ class BusinessSessionTests : public QObject {
         QVERIFY(client_payload.value("Email").toString().isEmpty());
         QVERIFY(client_payload.value("Phone").toString().isEmpty());
         input(client, "Name")->setText("Partial address client");
-        input(client, "Street address")->setText("Sydney");
-        input(client, "Postcode")->setText("2000");
+        client->findChild<QLineEdit*>("customer_billing_street1")->setText("Sydney");
+        client->findChild<QLineEdit*>("customer_billing_postcode")->setText("2000");
         submit(client);
         QTRY_COMPARE(saved.count(), 3);
         QCOMPARE(qvariant_cast<QJsonDocument>(client_data.last().at(1)).object().value("Address").toString(), "Sydney, 2000");
@@ -2661,7 +2816,7 @@ class BusinessSessionTests : public QObject {
         auto* stock = page->findChild<QTableWidget*>("stock_records");
         QTRY_COMPARE(stock->rowCount(), 1);
         QCOMPARE(stock->item(0, 0)->text(), "Copper pipe");
-        QCOMPARE(stock->columnCount(), 6);
+        QCOMPARE(stock->columnCount(), 7);
         QCOMPARE(stock->item(0, 0)->data(Qt::UserRole).toString(), "65c000000000000000000001");
         for (int column = 0; column < stock->columnCount(); ++column)
             QVERIFY(!stock->item(0, column)->text().contains("65c000"));

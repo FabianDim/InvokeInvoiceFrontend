@@ -30,17 +30,17 @@ class ClientPreferencesForm : public QWidget {
         layout->addLayout(form);
         auto* heading = new QHBoxLayout;
         heading->setContentsMargins(0, 12, 0, 0);
-        heading->addWidget(UiStyle::label("Client pricing", this, "sectionTitle"));
+        heading->addWidget(UiStyle::label("Customer pricing", this, "sectionTitle"));
         heading->addStretch();
         heading->addWidget(UiStyle::label("EXCLUDING GST", this, "pricingBadge"));
         layout->addLayout(heading);
-        auto* help = UiStyle::label("Set a price for this client, or leave it blank to use the default.", this, "body");
+        auto* help = UiStyle::label("Set a price for this customer, or leave it blank to use the default.", this, "body");
         help->setWordWrap(true);
         layout->addWidget(help);
         prices_ = new QTableWidget(0, 3, this);
         prices_->setObjectName("client_stock_prices");
-        prices_->setAccessibleName("Client stock prices");
-        prices_->setHorizontalHeaderLabels({"Stock item", "Default price", "Client price"});
+        prices_->setAccessibleName("Customer stock prices");
+        prices_->setHorizontalHeaderLabels({"Stock item", "Default price", "Customer price"});
         prices_->verticalHeader()->hide();
         prices_->verticalHeader()->setDefaultSectionSize(56);
         prices_->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
@@ -61,7 +61,7 @@ class ClientPreferencesForm : public QWidget {
         prices_->setEditTriggers(QAbstractItemView::NoEditTriggers);
         prices_->setFixedHeight(102);
         layout->addWidget(prices_);
-        status_ = UiStyle::label("Stock prices will load when you open the client form.", this, "status");
+        status_ = UiStyle::label("Stock prices will load when you open the customer form.", this, "status");
         status_->setWordWrap(true);
         layout->addWidget(status_);
     }
@@ -84,7 +84,7 @@ class ClientPreferencesForm : public QWidget {
             else {
                 bool ok = false;
                 const auto value = QLocale().toDouble(edit->text(), &ok);
-                if (!ok || !edit->hasAcceptableInput()) throw std::invalid_argument("Enter a valid client price or leave it blank for the stock default.");
+                if (!ok || !edit->hasAcceptableInput()) throw std::invalid_argument("Enter a valid customer price or leave it blank for the stock default.");
                 prices[id] = value;
             }
         }
@@ -116,7 +116,7 @@ class ClientPreferencesForm : public QWidget {
             edit->setObjectName("client_stock_price");
             edit->setProperty("stock_id", id);
             edit->setProperty("role", "input");
-            edit->setAccessibleName("Client price for " + name->text());
+            edit->setAccessibleName("Customer price for " + name->text());
             edit->setPlaceholderText("Use default");
             edit->setAlignment(Qt::AlignRight);
             edit->setToolTip("Leave blank to use the stock item's default price.");
@@ -129,7 +129,7 @@ class ClientPreferencesForm : public QWidget {
         }
         prices_->setFixedHeight(46 + qBound(1, prices_->rowCount(), 5) * 56);
         prices_->setVisible(prices_->rowCount() > 0);
-        UiStyle::message(status_, prices_->rowCount() == 0 ? "No saved stock yet. Create stock items, then edit this client to set individual prices." : QString{});
+        UiStyle::message(status_, prices_->rowCount() == 0 ? "No saved stock yet. Create stock items, then edit this customer to set individual prices." : QString{});
     }
     void set_error(const QString& message) { UiStyle::message(status_, "Could not load stock prices: " + message + " Reopen this form to retry."); }
   private:

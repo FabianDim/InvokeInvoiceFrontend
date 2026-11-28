@@ -33,7 +33,7 @@ class RecordDefinition {
             {"BusinessAddress", "Address", "Postal address", "BusinessAddress", FieldKind::Address, false, 2000},
             {"ACN", "ACN", "ACN", "ACN"},
             {"Website", "Website", "Website", "Website", FieldKind::Website, false, 2000}}};
-        static const RecordDefinition client{"client", "client", "Clients", {
+        static const RecordDefinition client{"client", "customer", "Clients", {
             {"Name", "Name", "Name", "ClientName", FieldKind::Text, true},
             {"ContactName", "Contact name", "Contact name", "ContactName"},
             {"Phone", "Phone", "Phone", "Phone"},
@@ -41,6 +41,7 @@ class RecordDefinition {
             {"Address", "Address", "Address", "Address", FieldKind::Address, false, 2000}}};
         static const RecordDefinition stock{"stock", "stock item", "Stock", {
             {"Name", "Name", "Name", "Name", FieldKind::Text, true},
+            {"ProductID", "Product ID", "Product ID", "ProductID", FieldKind::Text, false, 100},
             {"Quantity", "Quantity", "Stock on hand", "Quantity", FieldKind::Quantity},
             {"Price", "Price", "Default price (excluding GST)", "StdPrice", FieldKind::Money, true},
             {"Margin", "Margin", "Profit margin (%)", "ProfitMargin", FieldKind::Percent},
