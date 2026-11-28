@@ -5,9 +5,13 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import time
 import urllib.parse
 import urllib.request
 import zipfile
+
+WAIT_TIMEOUT_SECONDS = 5 * 60 * 60 + 30 * 60
+POLL_INTERVAL_SECONDS = 60
 
 
 class SafeRedirect(urllib.request.HTTPRedirectHandler):
@@ -35,42 +39,40 @@ class GitHub:
 
 
 def record(event, repository, tree):
-    pr = event["pull_request"]
-    if pr["base"]["ref"] != "Development":
-        raise ValueError("Test evidence must come from a Development PR.")
-    return {"repository": repository, "pr": event["number"], "head_sha": pr["head"]["sha"], "tree": tree}
+    if event.get("ref") != "refs/heads/Development":
+        raise ValueError("Test evidence must come from a push to Development.")
+    commit = event.get("after")
+    if not isinstance(commit, str) or not commit:
+        raise ValueError("Development push event has no commit SHA.")
+    return {"repository": repository, "ref": event["ref"], "commit": commit, "tree": tree}
 
 
-def verify(api, event, repository, tree):
+def verify(api, event, repository, tree, timeout_seconds=WAIT_TIMEOUT_SECONDS):
     pr = event["pull_request"]
     head = pr["head"]
     if pr["base"]["ref"] != "main" or head["ref"] != "Development" or head["repo"]["full_name"] != repository:
         raise ValueError("main only accepts a PR from this repository's Development branch.")
-    # A no-op sync merge can sit on top of a tested PR without changing its tree.
-    # Only reuse a PR's evidence when its merge tree is identical to the promoted tree.
-    sources = []
     commit_sha = head["sha"]
-    while commit_sha:
-        commit = api.read(f"commits/{commit_sha}")
-        if commit["commit"]["tree"]["sha"] != tree:
-            break
-        candidates = api.read(f"commits/{commit_sha}/pulls?per_page=100")
-        source = next((item for item in candidates if item.get("merged_at")
-                       and item["base"]["ref"] == "Development"
-                       and item["merge_commit_sha"] == commit_sha), None)
-        if source:
-            sources.append(source)
-        parents = commit.get("parents", [])
-        commit_sha = parents[0]["sha"] if parents else None
-    if not sources:
-        raise ValueError("Development must contain a merged PR for the exact tree being promoted.")
-    for source in sources:
-        runs = api.read("actions/workflows/ci.yml/runs?event=pull_request&status=success&per_page=100&head_sha="
-                        + source["head"]["sha"])["workflow_runs"]
-        expected = {"repository": repository, "pr": source["number"],
-                    "head_sha": source["head"]["sha"], "tree": tree}
+    commit = api.read(f"commits/{commit_sha}")
+    if commit["commit"]["tree"]["sha"] != tree:
+        raise ValueError("Sync Development with main before promoting; its tree differs from the PR merge tree.")
+
+    expected = {"repository": repository, "ref": "refs/heads/Development",
+                "commit": commit_sha, "tree": tree}
+    deadline = time.monotonic() + timeout_seconds
+    wait_reported = False
+    while True:
+        runs = api.read("actions/workflows/ci.yml/runs?event=push&per_page=100&head_sha="
+                        + commit_sha)["workflow_runs"]
+        pending = not runs
         for run in runs:
-            if run["conclusion"] != "success" or run["event"] != "pull_request" or run["head_sha"] != source["head"]["sha"]:
+            if (run.get("event") != "push" or run.get("head_branch") != "Development"
+                    or run.get("head_sha") != commit_sha):
+                continue
+            if run.get("status") != "completed":
+                pending = True
+                continue
+            if run.get("conclusion") != "success":
                 continue
             artifacts = api.read(f"actions/runs/{run['id']}/artifacts?per_page=100")["artifacts"]
             for artifact in artifacts:
@@ -83,8 +85,15 @@ def verify(api, event, repository, tree):
                     evidence = json.loads(bundle.read("test-validation.json"))
                 if evidence == expected:
                     return run["html_url"]
-    raise ValueError("No successful Development test run matches this exact merge tree. "
-                     "Sync Development with main and validate a new PR into Development before promoting.")
+        remaining = deadline - time.monotonic()
+        if not pending or remaining <= 0:
+            break
+        if not wait_reported:
+            print(f"Waiting for successful Development tests for commit {commit_sha}.", flush=True)
+            wait_reported = True
+        time.sleep(min(POLL_INTERVAL_SECONDS, remaining))
+    raise ValueError("No successful Development push test run matches this exact tree. "
+                     "Wait for the Development tests to pass, then promote the same tree.")
 
 
 def main():

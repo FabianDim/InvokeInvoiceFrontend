@@ -37,6 +37,7 @@ void NewInvoiceStock::reset_invoice() {
     create_invoice_pdf->setEnabled(true);
     create_invoice_pdf->setText("Finish invoice");
     new_name_->clear();
+    product_id_->clear();
     unit_->clear();
     keywords_->clear();
     margin_->setValue(0);
@@ -85,7 +86,7 @@ void NewInvoiceStock::update_stock_price() {
     auto* price = qobject_cast<QLineEdit*>(invoice_body_form_fields.value("price"));
     price->setText(stock.isEmpty() ? QString{} : QLocale().toString(Domain::Clients::stock_price(client_, stock), 'f', 2));
     price->setToolTip(client_.value("StockPrices").toObject().contains(stock.value("_id").toString())
-        ? "This client's saved price. You can change it for this invoice."
+        ? "This customer's saved price. You can change it for this invoice."
         : "The stock item's default price. You can change it for this invoice.");
 }
 
@@ -283,8 +284,12 @@ QLayout* NewInvoiceStock::create_item_entry_form() {
     keywords_ = new QLineEdit(saved_fields_);
     keywords_->setObjectName("new_stock_keywords");
     keywords_->setPlaceholderText("Optional, comma separated");
+    product_id_ = new QLineEdit(saved_fields_);
+    product_id_->setObjectName("new_stock_product_id");
+    product_id_->setMaxLength(100);
+    product_id_->setPlaceholderText("e.g. AUDIO-001");
     const QList<QPair<QString, QWidget*>> saved_inputs{
-        {"Stock on hand", stock_on_hand_}, {"Margin", margin_}, {"Unit", unit_}, {"Keywords", keywords_}};
+        {"Product ID", product_id_}, {"Stock on hand", stock_on_hand_}, {"Margin", margin_}, {"Unit", unit_}, {"Keywords", keywords_}};
     for (int index = 0; index < saved_inputs.size(); ++index) {
         const bool required = saved_inputs[index].first == "Unit";
         auto* label = UiStyle::label(required ? saved_inputs[index].first : saved_inputs[index].first + " (optional)",
@@ -342,6 +347,7 @@ QLayout* NewInvoiceStock::create_item_entry_form() {
             item["Margin"] = margin_->value() / 100.0;
             item["Unit"] = unit_->text().trimmed();
             item["Keywords"] = keywords_->text().trimmed();
+            item["ProductID"] = product_id_->text().trimmed();
             set_saving_stock(true);
             UiStyle::message(status_label_, offline_ ? "Adding demo stock..." : "Saving stock item...");
             emit save_invoice_stock(QJsonDocument(item), ++stock_request_);
@@ -424,6 +430,7 @@ void NewInvoiceStock::append_item(const QJsonObject& item) {
     margin_->setValue(0);
     unit_->clear();
     keywords_->clear();
+    product_id_->clear();
     update_stock_price();
 }
 

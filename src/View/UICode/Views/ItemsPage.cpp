@@ -56,7 +56,7 @@ void ItemsPage::create_page_layout() {
             const auto id = cell->data(Qt::UserRole).toString();
             if (id.isEmpty()) return;
             QMenu menu(table);
-            auto* edit = menu.addAction(table == stock_table_ ? "Edit stock item" : table == clients_table_ ? "Edit client" : "Edit business");
+            auto* edit = menu.addAction(table == stock_table_ ? "Edit stock item" : table == clients_table_ ? "Edit customer" : "Edit business");
             edit->setEnabled(refresh_button_->isEnabled());
             auto* view = menu.addAction("View record ID");
             auto* copy = menu.addAction("Copy record ID");
@@ -76,9 +76,9 @@ void ItemsPage::create_page_layout() {
     };
     business_table_ = add_table("Business", "business_records",
                                 {"Name", "ABN", "ACN", "Phone", "Email", "Postal address", "Website", "Logo path"});
-    clients_table_ = add_table("Clients", "client_records", {"Name", "Contact name", "Phone", "Email", "Address"});
+    clients_table_ = add_table("Customers", "client_records", {"Display name", "Primary contact", "Work phone", "Email", "Billing address", "Type", "Company", "Mobile"});
     stock_table_ = add_table("Stock", "stock_records",
-                             {"Name", "Quantity", "Price", "Margin", "Unit", "Keywords"});
+                             {"Name", "Quantity", "Price", "Margin", "Unit", "Keywords", "Product ID"});
     tabs_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
     layout->addWidget(tabs_);
 
@@ -124,7 +124,7 @@ void ItemsPage::business_selected(const QJsonObject& business) {
             UiStyle::fit_table(table);
         }
         tabs_->setTabText(0, "Business");
-        tabs_->setTabText(1, "Clients");
+        tabs_->setTabText(1, "Customers");
         tabs_->setTabText(2, "Stock");
         UiStyle::message(status_label_, {});
         tabs_->setCurrentIndex(0);
@@ -149,7 +149,9 @@ void ItemsPage::populate_table(QTableWidget* table, const QJsonArray& items, con
     for (int row = 0; row < items.size(); ++row) {
         const auto record = items.at(row).toObject();
         for (int column = 0; column < fields.size(); ++column) {
-            const auto value = record.value(fields.at(column));
+            const auto key = fields.at(column);
+            const auto value = key.startsWith("CustomerDetails.")
+                ? record.value("CustomerDetails").toObject().value(key.mid(16)) : record.value(key);
             auto* cell = new QTableWidgetItem;
             if (value.isArray()) {
                 QStringList values;
@@ -184,10 +186,10 @@ void ItemsPage::populate_items(const QJsonDocument& items) {
     const auto stock = data.value("stocks").toArray();
     if (!businesses.isEmpty()) business_label_->setText(businesses.first().toObject().value("BusinessName").toString());
     populate_table(business_table_, businesses, {"BusinessName", "ABN", "ACN", "Phone", "Email", "BusinessAddress", "Website", "LogoPath"});
-    populate_table(clients_table_, clients, {"Name", "ContactName", "Phone", "Email", "Address"});
-    populate_table(stock_table_, stock, {"Name", "Quantity", "Price", "Margin", "Unit", "Keywords"});
+    populate_table(clients_table_, clients, {"Name", "ContactName", "Phone", "Email", "Address", "CustomerDetails.Type", "CustomerDetails.CompanyName", "CustomerDetails.Mobile"});
+    populate_table(stock_table_, stock, {"Name", "Quantity", "Price", "Margin", "Unit", "Keywords", "ProductID"});
     tabs_->setTabText(0, QString("Business (%1)").arg(businesses.size()));
-    tabs_->setTabText(1, QString("Clients (%1)").arg(clients.size()));
+    tabs_->setTabText(1, QString("Customers (%1)").arg(clients.size()));
     tabs_->setTabText(2, QString("Stock (%1)").arg(stock.size()));
     UiStyle::message(status_label_, "Records loaded. Empty tabs have no saved records. Use Refresh to check for changes.");
     refresh_button_->setEnabled(true);
@@ -205,7 +207,7 @@ void ItemsPage::update_edit_button() {
     if (auto* table = qobject_cast<QTableWidget*>(tabs_->currentWidget()))
         tabs_->setFixedHeight(table->height() + tabs_->tabBar()->sizeHint().height() + 4);
     auto* table = qobject_cast<QTableWidget*>(tabs_->currentWidget());
-    edit_record_button_->setText(table == stock_table_ ? "Edit stock item" : table == clients_table_ ? "Edit client" : "Edit business");
+    edit_record_button_->setText(table == stock_table_ ? "Edit stock item" : table == clients_table_ ? "Edit customer" : "Edit business");
     edit_record_button_->setEnabled(!business_id_.isEmpty() && refresh_button_->isEnabled() &&
         table && !table->selectedItems().isEmpty());
 }
@@ -225,7 +227,8 @@ void ItemsPage::edit_record(QTableWidget* table, int row) {
     dialog->setWindowTitle("Edit " + definition.noun());
     dialog->setWindowModality(Qt::WindowModal);
     const auto available = dialog->screen()->availableGeometry();
-    dialog->resize(qMin(760, available.width()), qMin(definition.is_business() ? 760 : 540, available.height() - 60));
+    dialog->resize(qMin(resource == "client" ? 1060 : 760, available.width()),
+                   qMin(resource == "client" || definition.is_business() ? 850 : 540, available.height() - 60));
     auto* layout = new QVBoxLayout(dialog);
     layout->setContentsMargins(0, 0, 0, 0);
     auto* form = new ManagementForm(definition, record, dialog);

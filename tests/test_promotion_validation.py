@@ -1,4 +1,4 @@
-"""Promotion must reuse only successful tests for exactly the released files."""
+"""Promotion must reuse successful Development push tests for the exact tree."""
 import copy
 import importlib.util
 import io
@@ -7,6 +7,7 @@ from pathlib import Path
 import unittest
 import urllib.request
 import zipfile
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("promotion", Path(__file__).parents[1] / ".github/scripts/promotion-validation.py")
 promotion = importlib.util.module_from_spec(spec)
@@ -14,31 +15,28 @@ spec.loader.exec_module(promotion)
 
 REPO = "owner/invoices"
 EVENT = {"number": 42, "pull_request": {"base": {"ref": "main"},
-    "head": {"ref": "Development", "sha": "merged-dev", "repo": {"full_name": REPO}}}}
-EVIDENCE = {"repository": REPO, "pr": 41, "head_sha": "feature-sha", "tree": "tested-tree"}
+    "head": {"ref": "Development", "sha": "dev-commit", "repo": {"full_name": REPO}}}}
+PUSH_EVENT = {"ref": "refs/heads/Development", "after": "dev-commit"}
+EVIDENCE = {"repository": REPO, "ref": "refs/heads/Development",
+            "commit": "dev-commit", "tree": "tested-tree"}
 
 
 class FakeGitHub:
     def __init__(self):
-        self.pr = {"number": 41, "merged_at": "2026-11-22", "base": {"ref": "Development"},
-                   "merge_commit_sha": "merged-dev", "head": {"sha": "feature-sha"}}
-        self.run = {"id": 9, "event": "pull_request", "conclusion": "success",
-                    "head_sha": "feature-sha", "html_url": "https://example.invalid/run/9"}
+        self.run = {"id": 9, "event": "push", "status": "completed", "conclusion": "success",
+                    "head_sha": "dev-commit", "head_branch": "Development",
+                    "html_url": "https://example.invalid/run/9"}
+        self.run_responses = [[self.run]]
         self.evidence = copy.deepcopy(EVIDENCE)
         self.expired = False
-        self.commits = {
-            "merged-dev": {"commit": {"tree": {"sha": "tested-tree"}}, "parents": []},
-            "sync-merge": {"commit": {"tree": {"sha": "tested-tree"}},
-                           "parents": [{"sha": "merged-dev"}, {"sha": "main"}]},
-        }
+        self.commits = {"dev-commit": {"commit": {"tree": {"sha": "tested-tree"}}}}
 
     def read(self, path, binary=False):
-        if path.endswith("/pulls?per_page=100"):
-            return [self.pr]
         if path.startswith("commits/"):
             return self.commits[path.split("/")[1]]
         if path.startswith("actions/workflows/"):
-            return {"workflow_runs": [self.run]}
+            response = self.run_responses.pop(0) if len(self.run_responses) > 1 else self.run_responses[0]
+            return {"workflow_runs": response}
         if path.startswith("actions/runs/"):
             return {"artifacts": [{"name": "test-results", "expired": self.expired, "id": 8}]}
         assert binary
@@ -49,25 +47,23 @@ class FakeGitHub:
 
 
 class PromotionTests(unittest.TestCase):
-    def test_reuses_success_for_identical_merge_tree(self):
-        self.assertEqual(promotion.verify(FakeGitHub(), EVENT, REPO, "tested-tree"), "https://example.invalid/run/9")
+    def test_reuses_success_for_identical_development_push_tree(self):
+        self.assertEqual(promotion.verify(FakeGitHub(), EVENT, REPO, "tested-tree"),
+                         "https://example.invalid/run/9")
 
-    def test_reuses_tested_pr_when_sync_merge_preserves_its_tree(self):
+    def test_waits_for_in_progress_development_tests(self):
         api = FakeGitHub()
-        event = copy.deepcopy(EVENT)
-        event["pull_request"]["head"]["sha"] = "sync-merge"
-        self.assertEqual(promotion.verify(api, event, REPO, "tested-tree"), "https://example.invalid/run/9")
+        api.run_responses = [
+            [{"id": 9, "event": "push", "status": "in_progress", "head_sha": "dev-commit",
+              "head_branch": "Development"}],
+            [api.run],
+        ]
+        with patch.object(promotion.time, "sleep", return_value=None):
+            self.assertEqual(promotion.verify(api, EVENT, REPO, "tested-tree"),
+                             "https://example.invalid/run/9")
 
-    def test_rejects_sync_merge_that_changes_the_tested_tree(self):
-        api = FakeGitHub()
-        api.commits["sync-merge"]["commit"]["tree"]["sha"] = "different-tree"
-        event = copy.deepcopy(EVENT)
-        event["pull_request"]["head"]["sha"] = "sync-merge"
-        with self.assertRaisesRegex(ValueError, "merged PR for the exact tree"):
-            promotion.verify(api, event, REPO, "different-tree")
-
-    def test_rejects_changed_merge_tree_including_base_changes(self):
-        with self.assertRaisesRegex(ValueError, "exact tree being promoted"):
+    def test_rejects_merge_tree_different_from_development_commit(self):
+        with self.assertRaisesRegex(ValueError, "tree differs from the PR merge tree"):
             promotion.verify(FakeGitHub(), EVENT, REPO, "different-tree")
 
     def test_rejects_other_branches_and_fork_named_development(self):
@@ -75,42 +71,32 @@ class PromotionTests(unittest.TestCase):
             event = copy.deepcopy(EVENT)
             event["pull_request"]["head"].update(ref=ref, repo={"full_name": repo})
             with self.assertRaisesRegex(ValueError, "only accepts"):
-                promotion.verify(FakeGitHub(), event, REPO, "tested-tree")
+                promotion.verify(FakeGitHub(), event, REPO, "tested-tree", timeout_seconds=0)
 
-    def test_rejects_unreviewed_tip_and_wrong_base(self):
-        for field, value in [("merge_commit_sha", "older-merge"), ("merged_at", None), ("base", {"ref": "main"})]:
-            api = FakeGitHub()
-            api.pr[field] = value
-            with self.assertRaisesRegex(ValueError, "merged PR"):
-                promotion.verify(api, EVENT, REPO, "tested-tree")
-
-    def test_rejects_failed_cancelled_other_event_and_stale_run(self):
-        for field, value in [("conclusion", "failure"), ("conclusion", "cancelled"),
-                             ("event", "push"), ("head_sha", "older-sha")]:
+    def test_rejects_failed_or_wrong_branch_test_run(self):
+        for field, value in [("conclusion", "failure"), ("head_branch", "feature")]:
             api = FakeGitHub()
             api.run[field] = value
-            with self.assertRaisesRegex(ValueError, "No successful"):
-                promotion.verify(api, EVENT, REPO, "tested-tree")
+            with self.assertRaisesRegex(ValueError, "No successful Development push test run"):
+                promotion.verify(api, EVENT, REPO, "tested-tree", timeout_seconds=0)
 
     def test_rejects_expired_or_mismatched_evidence(self):
         api = FakeGitHub()
         api.expired = True
-        with self.assertRaises(ValueError):
-            promotion.verify(api, EVENT, REPO, "tested-tree")
-        for key, value in [("repository", "other/repo"), ("pr", 40), ("head_sha", "older-sha")]:
+        with self.assertRaisesRegex(ValueError, "No successful Development push test run"):
+            promotion.verify(api, EVENT, REPO, "tested-tree", timeout_seconds=0)
+        for key, value in [("repository", "other/repo"), ("commit", "older-sha"), ("tree", "older-tree")]:
             api = FakeGitHub()
             api.evidence[key] = value
-            with self.assertRaises(ValueError):
-                promotion.verify(api, EVENT, REPO, "tested-tree")
+            with self.assertRaisesRegex(ValueError, "No successful Development push test run"):
+                promotion.verify(api, EVENT, REPO, "tested-tree", timeout_seconds=0)
 
-    def test_records_only_development_tests(self):
-        with self.assertRaises(ValueError):
-            promotion.record(EVENT, REPO, "tested-tree")
-        event = copy.deepcopy(EVENT)
-        event.update(number=41)
-        event["pull_request"]["base"]["ref"] = "Development"
-        event["pull_request"]["head"]["sha"] = "feature-sha"
-        self.assertEqual(promotion.record(event, REPO, "tested-tree"), EVIDENCE)
+    def test_records_only_development_pushes(self):
+        self.assertEqual(promotion.record(PUSH_EVENT, REPO, "tested-tree"), EVIDENCE)
+        for event in [{"ref": "refs/heads/feature", "after": "commit"}, EVENT,
+                      {"ref": "refs/heads/Development"}]:
+            with self.assertRaises(ValueError):
+                promotion.record(event, REPO, "tested-tree")
 
     def test_download_redirect_does_not_forward_github_token(self):
         request = urllib.request.Request("https://api.github.com/artifact", headers={"Authorization": "Bearer test"})

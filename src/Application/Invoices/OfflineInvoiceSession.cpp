@@ -61,6 +61,7 @@ QString OfflineInvoiceSession::save(const QString& resource, QJsonObject data, c
             clients.append(data);
         } else {
             data["_id"] = id;
+            data["ProductID"] = Domain::Stock::product_id(data.value("ProductID"));
             data["Quantity"] = number(data.value("Quantity"), true);
             data["Price"] = number(data.value("Price"));
             data["Margin"] = number(data.value("Margin"), true);

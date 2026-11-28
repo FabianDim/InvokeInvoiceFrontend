@@ -39,12 +39,21 @@ use `x64-static-release`, then run:
 
 The executable and settings retain the `InvokeInvoiceSystem` product name.
 The default API is `https://invoice-backend-app-69d26786220b.herokuapp.com`.
-For a separately running local backend set
+When launching the frontend with VS Code's CMake Tools debugger in the combined
+workspace, it uses `http://127.0.0.1:1234` instead. Start the local backend first;
+it listens on that address by default. For other launch methods, set
 `$env:INVOICE_API_URL = 'http://127.0.0.1:1234'` before launching the app.
 Other URLs must use HTTPS. The frontend never starts an embedded server and needs
 no MongoDB credentials. Account requests and demo exports use the same service URL.
 
 ## Tests
+
+Customer creation and editing use Overview, Addresses, Contacts, Pricing and Notes
+tabs. Billing and shipping addresses are separate; copying billing details is a
+one-time copy. A display name is the only required field. Additional contacts and
+notes are saved with the customer but are not printed on invoices. Existing
+customer records and the `client` API resource names remain compatible. Deploy the
+matching backend before using these fields with account records.
 
 ```powershell
 cmake --build --preset x64-release --target all-tests
@@ -71,12 +80,12 @@ contract copy, so both repositories build independently.
 
 Work goes through a feature PR into `Development`, then a `Development` PR into
 `main`. The main ruleset requires **All available tests** and **Development PR
-required**, with no bypass, force pushes or branch deletion. Development PRs run
-every registered frontend CTest suite and signing tests. Main promotions reuse
-successful Development PR test evidence only for the exact same Git tree; changed
-files or expired evidence require a new tested Development PR.
+required**, with no bypass, force pushes or branch deletion. Every push to
+`Development` runs the frontend CTest suites and signing tests. Main promotions
+wait for successful test evidence from the exact Development commit and merge
+tree; changed files or expired evidence require a new successful Development run.
 
-Every push to `main` automatically builds, tests and publishes a signed Windows EXE.
+Every push to `main` automatically builds and publishes a signed Windows EXE.
 The version is the manifest version plus the release workflow run number in the
 patch component; reruns keep their version and never overwrite a published release.
 An explicit `vMAJOR.MINOR.PATCH` tag also supports a manually selected version.

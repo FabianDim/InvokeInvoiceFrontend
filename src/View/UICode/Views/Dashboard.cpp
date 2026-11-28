@@ -54,7 +54,7 @@ void App::Views::Dashboard::create_page_layout() {
     layout->addLayout(business_row, 2, 0, 1, 2);
 
     invoice_button = new QPushButton("Create new invoice", content);
-    client_button = new QPushButton("Create new client", content);
+    client_button = new QPushButton("Create new customer", content);
     business_button = new QPushButton("Configure business", content);
     stock_button = new QPushButton("Create stock item", content);
     account_button = new QPushButton("Account settings", content);
@@ -93,7 +93,7 @@ void App::Views::Dashboard::create_page_layout() {
         layout->addWidget(card, row, column);
     };
     add_action(invoice_button, "01 / INVOICING", "From work done to invoice sent.", 3, 0);
-    add_action(client_button, "02 / CLIENTS", "A place for every working relationship.", 3, 1);
+    add_action(client_button, "02 / CUSTOMERS", "A place for every working relationship.", 3, 1);
     add_action(business_button, "03 / BUSINESS", "Your business, down to the details.", 4, 0);
     add_action(stock_button, "04 / INVENTORY", "Products, quantities and pricing.", 4, 1);
     add_action(items_button, "05 / RECORDS", "Find the details you need, together.", 5, 0);
@@ -136,7 +136,7 @@ void Dashboard::set_offline(bool offline) {
     invoices_button->setText(offline ? "Browse demo invoices" : "Browse invoices");
     findChild<QLabel*>("titleLabel")->setText(offline ? "Try a demo invoice" : "Your workspace");
     findChild<QLabel*>("subtitleLabel")->setText(offline
-        ? "Create a business, client and items locally. PDF export requires internet; nothing is saved to an account."
+        ? "Create a business, customer and items locally. PDF export requires internet; nothing is saved to an account."
         : "Create invoices from the business data you already manage.");
 }
 
